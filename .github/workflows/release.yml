@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./scripts/build-android-release.sh "$VERSION"
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: |
+            dist/MiDoid-android-${{ github.ref_name }}-debug.apk
+            dist/MiDoid-android-${{ github.ref_name }}-debug.apk.sha256
+
+  macos:
+    name: Build macOS ZIP
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build macOS ZIP
+        run: ./scripts/build-macos-release.sh "$VERSION"
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            dist/MiDoid-macOS-${{ github.ref_name }}.zip
+            dist/MiDoid-macOS-${{ github.ref_name }}.zip.sha256
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - android
+      - macos
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: release-artifacts/*
+          body: |
+            ## MiDoid ${{ github.ref_name }}
+
+            ### What's included
+
+            - Android companion app with QR pairing.
+            - macOS menu bar companion.
+            - Local WebDAV file browsing and transfer.
+            - Selected-folder sharing and optional All Files Access mode.
+
+            ### Install
+
+            1. Download and install `MiDoid-android-${{ github.ref_name }}-debug.apk` on Android.
+            2. Download and unzip `MiDoid-macOS-${{ github.ref_name }}.zip` on Mac.
+            3. Open the Mac app, then scan its QR code from the Android app.
+
+            ### Notes
+
+            - MiDoid is local-first and does not use cloud servers.
+            - The Android APK is currently a debug/sideload build.
+            - Optional All Files Access is intended for personal or sideloaded use.
+            - The macOS ZIP may show Gatekeeper warnings until signing and notarization are added.

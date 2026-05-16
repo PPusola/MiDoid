@@ -2,6 +2,7 @@
 android/.gradle/
 android/**/build/
 android/local.properties
+dist/
 *.apk
 *.aab
 
