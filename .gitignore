@@ -1,0 +1,17 @@
+# Android / Gradle
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+
+# macOS / Xcode
+mac/**/xcuserdata/
+mac/**/UserInterfaceState.xcuserstate
+DerivedData/
+*.xcuserstate
+
+# OS / editor
+.DS_Store
+.idea/
+*.iml
