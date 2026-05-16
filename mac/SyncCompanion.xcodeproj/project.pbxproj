@@ -1,0 +1,345 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA000001 /* SyncCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* SyncCompanionApp.swift */; };
+		AA000002 /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* SessionState.swift */; };
+		AA000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003 /* KeychainStore.swift */; };
+		AA000005 /* MdnsDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005 /* MdnsDiscovery.swift */; };
+		AA000007 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007 /* ConnectionManager.swift */; };
+		AA000008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008 /* Theme.swift */; };
+		AA000009 /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100009 /* QRCodeView.swift */; };
+		AA000010 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* MenuBarView.swift */; };
+		AA000012 /* WebDavClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013 /* WebDavClient.swift */; };
+		AA000013 /* FileBrowserViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* FileBrowserViewModel.swift */; };
+		AA000014 /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* FileBrowserView.swift */; };
+		AA000015 /* FileManagerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* FileManagerWindow.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA100001 /* SyncCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCompanionApp.swift; sourceTree = "<group>"; };
+		AA100002 /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
+		AA100003 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		AA100005 /* MdnsDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdnsDiscovery.swift; sourceTree = "<group>"; };
+		AA100007 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		AA100008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA100009 /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
+		AA100010 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		AA100011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA100013 /* WebDavClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDavClient.swift; sourceTree = "<group>"; };
+		AA100014 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
+		AA100015 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
+		AA100016 /* FileManagerWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileManagerWindow.swift; sourceTree = "<group>"; };
+		AA200001 /* SyncCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SyncCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA500003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA300000 = {
+			isa = PBXGroup;
+			children = (
+				AA300001 /* SyncCompanion */,
+				AA300009 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA300001 /* SyncCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				AA300002 /* App */,
+				AA300003 /* Session */,
+				AA300004 /* Networking */,
+				AA300006 /* FileManager */,
+				AA300005 /* UI */,
+			);
+			path = SyncCompanion;
+			sourceTree = "<group>";
+		};
+		AA300002 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				AA100001 /* SyncCompanionApp.swift */,
+				AA100011 /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		AA300003 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				AA100002 /* SessionState.swift */,
+				AA100003 /* KeychainStore.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		AA300004 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				AA100005 /* MdnsDiscovery.swift */,
+				AA100007 /* ConnectionManager.swift */,
+				AA100013 /* WebDavClient.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		AA300006 /* FileManager */ = {
+			isa = PBXGroup;
+			children = (
+				AA100014 /* FileBrowserViewModel.swift */,
+				AA100015 /* FileBrowserView.swift */,
+				AA100016 /* FileManagerWindow.swift */,
+			);
+			path = FileManager;
+			sourceTree = "<group>";
+		};
+		AA300005 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				AA100008 /* Theme.swift */,
+				AA100009 /* QRCodeView.swift */,
+				AA100010 /* MenuBarView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		AA300009 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA200001 /* SyncCompanion.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA400001 /* SyncCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA600001 /* Build configuration list for PBXNativeTarget "SyncCompanion" */;
+			buildPhases = (
+				AA500001 /* Sources */,
+				AA500002 /* Resources */,
+				AA500003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SyncCompanion;
+			productName = SyncCompanion;
+			productReference = AA200001 /* SyncCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA700001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2650;
+			};
+			buildConfigurationList = AA600000 /* Build configuration list for PBXProject "SyncCompanion" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA300000;
+			productRefGroup = AA300009 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA400001 /* SyncCompanion */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA500002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA500001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000001 /* SyncCompanionApp.swift in Sources */,
+				AA000002 /* SessionState.swift in Sources */,
+				AA000003 /* KeychainStore.swift in Sources */,
+				AA000005 /* MdnsDiscovery.swift in Sources */,
+				AA000007 /* ConnectionManager.swift in Sources */,
+				AA000008 /* Theme.swift in Sources */,
+				AA000009 /* QRCodeView.swift in Sources */,
+				AA000010 /* MenuBarView.swift in Sources */,
+				AA000012 /* WebDavClient.swift in Sources */,
+				AA000013 /* FileBrowserViewModel.swift in Sources */,
+				AA000014 /* FileBrowserView.swift in Sources */,
+				AA000015 /* FileManagerWindow.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA800001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				INFOPLIST_FILE = SyncCompanion/App/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.synccompanion.mac;
+				PRODUCT_NAME = SyncCompanion;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA800002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = SyncCompanion/App/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.synccompanion.mac;
+				PRODUCT_NAME = SyncCompanion;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA800003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+			};
+			name = Debug;
+		};
+		AA800004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA600000 /* Build configuration list for PBXProject "SyncCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA800003 /* Debug */,
+				AA800004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA600001 /* Build configuration list for PBXNativeTarget "SyncCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA800001 /* Debug */,
+				AA800002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA700001 /* Project object */;
+}

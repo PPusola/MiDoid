@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.custom.androidsync</string>
+
+    <!-- __APP_PATH__ is substituted by setup.sh at install time -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__APP_PATH__</string>
+    </array>
+
+    <!-- Start at login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart if it crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Log to ~/Library/Logs for easy debugging -->
+    <key>StandardOutPath</key>
+    <string>/Users/Shared/androidsync.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/Shared/androidsync.log</string>
+
+    <!-- Throttle restarts — wait 10s before relaunching after a crash -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+</dict>
+</plist>
