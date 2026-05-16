@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="24dp">
+
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/sheet_title"
+        android:textAppearance="?attr/textAppearanceTitleLarge"
+        android:textColor="?attr/colorOnSurface" />
+
+    <TextView
+        android:id="@+id/tvDurationLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textAlignment="center"
+        android:textAppearance="?attr/textAppearanceHeadlineSmall"
+        android:textColor="@color/sync_primary"
+        tools:text="4 hours" />
+
+    <com.google.android.material.slider.Slider
+        android:id="@+id/slider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="24dp"
+        app:haloColor="@color/sync_primary_container"
+        app:labelBehavior="gone"
+        app:thumbColor="@color/sync_primary"
+        app:tickColorActive="@color/sync_primary"
+        app:trackColorActive="@color/sync_primary"
+        app:trackColorInactive="@color/sync_outline" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancel"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="52dp"
+            android:layout_marginEnd="8dp"
+            android:text="@string/btn_cancel" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStartSession"
+            android:layout_width="wrap_content"
+            android:layout_height="52dp"
+            android:text="@string/btn_start_session" />
+    </LinearLayout>
+
+</LinearLayout>

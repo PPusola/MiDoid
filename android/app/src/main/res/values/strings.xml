@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SyncCompanion</string>
+    <string name="home_title">SyncCompanion</string>
+    <string name="home_subtitle">Private Mac access for your Android files</string>
+
+    <!-- Status -->
+    <string name="status_idle">Ready to Connect</string>
+    <string name="status_idle_subtitle">Scan the QR code from your Mac app</string>
+    <string name="status_section">Session</string>
+    <string name="storage_section">Shared folder</string>
+    <string name="shared_folder_default">Mac will see SyncCompanion app storage</string>
+    <string name="shared_folder_selected">Mac will see selected Android folder</string>
+    <string name="shared_folder_all_files">Mac will see Android shared storage</string>
+    <string name="btn_choose_folder">Choose Android Folder</string>
+    <string name="btn_allow_all_files">Allow All Files Access</string>
+    <string name="btn_clear_folder">Use App Storage</string>
+    <string name="btn_scan_mac_qr">Scan Mac QR</string>
+    <string name="status_connected">Connected to Mac</string>
+    <string name="status_connected_subtitle">Session active</string>
+    <string name="status_connected_until_disconnect">Ends when Mac disconnects</string>
+
+    <!-- QR scan -->
+    <string name="scan_instruction">Point at the QR code on your Mac</string>
+    <string name="qr_expired">QR code expired — ask Mac to refresh</string>
+    <string name="btn_close">Close</string>
+
+    <!-- Session duration sheet -->
+    <string name="sheet_title">How long should this session last?</string>
+    <string name="btn_start_session">Start Session</string>
+    <string name="btn_cancel">Cancel</string>
+
+    <!-- End session dialog -->
+    <string name="end_session_title">End Session?</string>
+    <string name="end_session_message">Your Mac will be disconnected and will need to re-scan next time.</string>
+    <string name="end_session">End Session</string>
+
+    <!-- Root warning -->
+    <string name="root_warning_title">Rooted Device Detected</string>
+    <string name="root_warning_message">This device appears to be rooted. Session keys may be at higher risk of extraction. Proceed only if you trust this device.</string>
+    <string name="proceed_anyway">Proceed Anyway</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_name">Mac Sync</string>
+    <string name="notif_channel_desc">Shows while phone is connected to Mac</string>
+    <string name="notif_title">Mac Sync Active</string>
+    <string name="notif_action_end">End Session</string>
+</resources>

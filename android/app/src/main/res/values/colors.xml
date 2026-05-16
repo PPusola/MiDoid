@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sync_primary">#146C63</color>
+    <color name="sync_on_primary">#FFFFFF</color>
+    <color name="sync_primary_container">#BCECE3</color>
+    <color name="sync_on_primary_container">#003731</color>
+    <color name="sync_secondary">#4B6078</color>
+    <color name="sync_secondary_container">#D5E4F7</color>
+    <color name="sync_on_secondary_container">#071D33</color>
+    <color name="sync_surface">#F7FAF9</color>
+    <color name="sync_surface_container">#FFFFFF</color>
+    <color name="sync_outline">#D8E1DF</color>
+    <color name="sync_success">#207245</color>
+</resources>
