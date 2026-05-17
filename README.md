@@ -57,10 +57,16 @@ See [SECURITY.md](SECURITY.md) for the threat model and permission details.
 
 ## Download
 
-Open the GitHub Releases page and download both files for the latest version:
+The install files are on the GitHub Releases page for this repository:
+
+<https://github.com/PPusola/MiDoid/releases>
+
+Open the latest release and download these two assets:
 
 - `MiDoid-android-vX.Y.Z-debug.apk`
 - `MiDoid-macOS-vX.Y.Z.zip`
+
+Use the APK for your Android phone. Use the ZIP for your Mac.
 
 The `.sha256` files are checksums. They are useful for verifying downloads, but they are not needed to run the app.
 
