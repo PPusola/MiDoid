@@ -81,36 +81,70 @@ final class WebDavClient {
         }
     }
 
+    private func mapNetworkError(_ error: Error) -> Error {
+        guard let urlError = error as? URLError else { return error }
+        if urlError.code == .notConnectedToInternet, isLocalAddress(ip) {
+            return WebDavError.localNetworkProhibited
+        }
+        return error
+    }
+
+    private func isLocalAddress(_ host: String) -> Bool {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        if parts[0] == 10 { return true }
+        if parts[0] == 172 && (16...31).contains(parts[1]) { return true }
+        if parts[0] == 192 && parts[1] == 168 { return true }
+        if parts[0] == 169 && parts[1] == 254 { return true }
+        return false
+    }
+
     // MARK: - WebDAV verbs
 
     func propfind(path: String) async throws -> [WebDavItem] {
-        let (data, response) = try await session.data(for: req(method: "PROPFIND", path: path,
-                                                               extra: ["Depth": "1"]))
-        try validate(response, allowed: [207])
-        return PropfindParser.parse(data: data, requestedPath: path)
+        do {
+            let (data, response) = try await session.data(for: req(method: "PROPFIND", path: path,
+                                                                   extra: ["Depth": "1"]))
+            try validate(response, allowed: [207])
+            return PropfindParser.parse(data: data, requestedPath: path)
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func download(path: String) async throws -> Data {
-        let (data, response) = try await session.data(for: req(method: "GET", path: path))
-        try validate(response, allowed: [200])
-        return data
+        do {
+            let (data, response) = try await session.data(for: req(method: "GET", path: path))
+            try validate(response, allowed: [200])
+            return data
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func download(path: String, to destination: URL) async throws {
-        let (tempURL, response) = try await session.download(for: req(method: "GET", path: path))
-        try validate(response, allowed: [200])
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
+        do {
+            let (tempURL, response) = try await session.download(for: req(method: "GET", path: path))
+            try validate(response, allowed: [200])
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: tempURL, to: destination)
+        } catch {
+            throw mapNetworkError(error)
         }
-        try FileManager.default.moveItem(at: tempURL, to: destination)
     }
 
     func upload(path: String, data: Data) async throws {
-        let (_, response) = try await session.data(for: req(method: "PUT", path: path,
-                                                            extra: ["Content-Type": "application/octet-stream",
-                                                                    "Content-Length": "\(data.count)"],
-                                                            body: data))
-        try validate(response, allowed: [200, 201, 204])
+        do {
+            let (_, response) = try await session.data(for: req(method: "PUT", path: path,
+                                                                extra: ["Content-Type": "application/octet-stream",
+                                                                        "Content-Length": "\(data.count)"],
+                                                                body: data))
+            try validate(response, allowed: [200, 201, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func upload(path: String, fileURL: URL) async throws {
@@ -120,27 +154,42 @@ final class WebDavClient {
             "Content-Length": "\(size)"
         ])
         request.httpBody = nil
-        let (_, response) = try await session.upload(for: request, fromFile: fileURL)
-        try validate(response, allowed: [200, 201, 204])
+        do {
+            let (_, response) = try await session.upload(for: request, fromFile: fileURL)
+            try validate(response, allowed: [200, 201, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func delete(path: String) async throws {
-        let (_, response) = try await session.data(for: req(method: "DELETE", path: path))
-        try validate(response, allowed: [200, 202, 204])
+        do {
+            let (_, response) = try await session.data(for: req(method: "DELETE", path: path))
+            try validate(response, allowed: [200, 202, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 
     func mkcol(path: String) async throws {
-        let (_, response) = try await session.data(for: req(method: "MKCOL", path: path))
-        try validate(response, allowed: [200, 201, 204])
+        do {
+            let (_, response) = try await session.data(for: req(method: "MKCOL", path: path))
+            try validate(response, allowed: [200, 201, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
     }
 }
 
 enum WebDavError: LocalizedError {
     case httpStatus(Int)
+    case localNetworkProhibited
 
     var errorDescription: String? {
         switch self {
         case .httpStatus(let code): return "WebDAV request failed with HTTP \(code)."
+        case .localNetworkProhibited:
+            return "macOS is blocking MiDoid from the Local Network. Enable MiDoid in System Settings > Privacy & Security > Local Network, then reconnect."
         }
     }
 }
