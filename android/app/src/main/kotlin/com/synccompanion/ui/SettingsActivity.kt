@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.synccompanion.R
 import com.synccompanion.databinding.ActivitySettingsBinding
 import com.synccompanion.service.SyncService
@@ -42,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnSettingsChooseFolder.setOnClickListener { folderPicker.launch(null) }
         binding.btnSettingsAllFiles.setOnClickListener { openAllFilesSettings() }
         binding.btnSettingsAppStorage.setOnClickListener { clearSharedFolder() }
+        binding.btnSettingsPermissionInfo.setOnClickListener { showPermissionInfo() }
     }
 
     override fun onResume() {
@@ -86,6 +88,14 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun hasAllFilesAccess(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+
+    private fun showPermissionInfo() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.permission_explainer_title)
+            .setMessage(R.string.permission_explainer_message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
 
     private fun restartServiceIfActive() {
         if (!sessionManager.isSessionActive()) return

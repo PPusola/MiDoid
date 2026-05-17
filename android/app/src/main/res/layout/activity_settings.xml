@@ -80,6 +80,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:text="@string/btn_clear_folder" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSettingsPermissionInfo"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="@string/btn_permission_info" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

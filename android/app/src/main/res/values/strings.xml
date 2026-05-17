@@ -23,6 +23,16 @@
     <string name="security_permission_default">Permission: app storage only</string>
     <string name="security_permission_selected">Permission: selected folder</string>
     <string name="security_permission_all_files">Permission: all shared storage</string>
+    <string name="dashboard_section">Main statistics</string>
+    <string name="stat_mac_waiting">Mac: waiting for connection</string>
+    <string name="stat_mac_connected">Mac: %1$s</string>
+    <string name="stat_session_idle">Session: inactive</string>
+    <string name="stat_session_active">Session: %1$s remaining</string>
+    <string name="stat_storage_app">Storage: app storage only</string>
+    <string name="stat_storage_selected">Storage: %1$s</string>
+    <string name="stat_storage_all_files">Storage: all shared files</string>
+    <string name="stat_privacy_local">Privacy: local network only, no cloud</string>
+    <string name="manage_settings">Manage Settings</string>
     <string name="permission_explainer_title">What can your Mac access?</string>
     <string name="permission_explainer_message">MiDoid only shares files during an active session. Selected Folder is safest. All Files Access is optional and exposes shared Android storage for personal sideload use.</string>
     <string name="btn_choose_folder">Choose Shared Folder</string>
