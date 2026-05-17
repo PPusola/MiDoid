@@ -7,6 +7,13 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
 
+    var isOpen: Bool { window != nil }
+
+    func bringToFront() {
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func open(ip: String, port: Int, token: String) {
         if let existing = window {
             existing.makeKeyAndOrderFront(nil)

@@ -6,12 +6,33 @@ import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Embedded TCP server that accepts WebDAV connections on port [PORT].
+ *
+ * Each accepted connection is dispatched to a cached thread pool so that
+ * multiple simultaneous transfers (e.g. macOS Finder + another client) do
+ * not block each other. The server is intentionally single-lifecycle: call
+ * [start] once and [stop] once; re-use after stopping is not supported.
+ *
+ * @param storage  The [StorageBackend] all WebDAV requests are forwarded to.
+ * @param token    Session token forwarded to [WebDavHandler] for per-request authentication.
+ */
 class WebDavServer(private val storage: StorageBackend, private val token: String) {
 
+    /** Unbounded cached thread pool — idle threads expire after 60 s. */
     private val pool = Executors.newCachedThreadPool()
+
+    /** Atomic flag shared between the accept loop and [stop] to signal shutdown. */
     private val running = AtomicBoolean(false)
+
     private var serverSocket: ServerSocket? = null
 
+    /**
+     * Binds [PORT] and starts the accept loop on a pool thread.
+     * Idempotent — a second call while the server is already running is a no-op.
+     *
+     * @throws java.io.IOException if the port is already in use by another process.
+     */
     fun start() {
         if (running.getAndSet(true)) return
         val ss = ServerSocket(PORT)
@@ -20,6 +41,11 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         Log.i(TAG, "WebDAV server started on port $PORT")
     }
 
+    /**
+     * Closes the [ServerSocket] and clears the running flag.
+     * The accept loop exits on the next iteration when it catches the resulting exception.
+     * In-flight connections already dispatched to pool threads complete normally.
+     */
     fun stop() {
         running.set(false)
         serverSocket?.close()
@@ -27,6 +53,13 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         Log.i(TAG, "WebDAV server stopped")
     }
 
+    /**
+     * Blocks accepting connections from [ss] until [running] becomes false or
+     * the socket is closed by [stop]. Each accepted [Socket] is immediately
+     * submitted to the thread pool so this loop is never blocked by slow clients.
+     *
+     * @param ss  The bound [ServerSocket] to accept from.
+     */
     private fun acceptLoop(ss: ServerSocket) {
         try {
             while (running.get()) {
@@ -38,6 +71,15 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         }
     }
 
+    /**
+     * Handles a single client connection end-to-end: parses the HTTP request,
+     * dispatches it through [WebDavHandler], writes the response, and closes the socket.
+     *
+     * A 30-second read timeout prevents idle or stalled clients from holding a
+     * pool thread indefinitely.
+     *
+     * @param socket  The accepted client [Socket].
+     */
     private fun handle(socket: Socket) {
         try {
             socket.soTimeout = 30_000
@@ -52,6 +94,7 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
     }
 
     companion object {
+        /** TCP port the WebDAV server binds to. macOS mounts it as `http://<device-ip>:8080`. */
         const val PORT = 8080
         private const val TAG = "WebDavServer"
     }

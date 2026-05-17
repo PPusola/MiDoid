@@ -59,13 +59,27 @@ final class FileBrowserViewModel: ObservableObject {
     @Published var pendingUploadConflict: PendingUploadConflict?
     @Published var mediaPreview: MediaPreview?
     @Published var isLoadingPreview = false
+    @Published var previewIndex: Int? = nil
 
     let client: WebDavClient
     private var pathStack: [String] = ["/"]
     private var activeTransferTask: Task<Void, Never>?
 
+    // ±5 sliding preview cache: path → downloaded preview
+    private var previewCache: [String: MediaPreview] = [:]
+    // In-flight background prefetch tasks: path → task
+    private var prefetchTasks: [String: Task<Void, Never>] = [:]
+
     var canGoBack: Bool { pathStack.count > 1 }
     var endpointLabel: String { "\(client.ip):\(client.port)" }
+
+    // All previewable items in the current directory (images + videos)
+    var previewableItems: [WebDavItem] { items.filter { $0.isPreviewableMedia } }
+    var hasPreviousPreview: Bool { (previewIndex ?? 0) > 0 }
+    var hasNextPreview: Bool {
+        guard let idx = previewIndex else { return false }
+        return idx < previewableItems.count - 1
+    }
 
     var breadcrumbs: [(name: String, path: String)] {
         var result: [(name: String, path: String)] = [("Android", "/")]
@@ -108,6 +122,7 @@ final class FileBrowserViewModel: ObservableObject {
     // MARK: - Navigation
 
     func load(path: String) async {
+        if path != currentPath { closePreview() }
         isLoading = true
         errorMessage = nil
         do {
@@ -146,44 +161,113 @@ final class FileBrowserViewModel: ObservableObject {
 
     func refresh() { Task { await load(path: currentPath) } }
 
-    func reconnect() {
-        Task { await load(path: currentPath) }
-    }
+    func reconnect() { Task { await load(path: currentPath) } }
 
     // MARK: - Media preview
 
     func preview(_ item: WebDavItem) async {
         guard item.isPreviewableMedia else { return }
+        guard let index = previewableItems.firstIndex(where: { $0.id == item.id }) else { return }
         isLoadingPreview = true
         errorMessage = nil
+        defer { isLoadingPreview = false }
+
+        if let cached = previewCache[item.path] {
+            previewIndex = index
+            mediaPreview = cached
+            updateCacheWindow(around: index)
+            return
+        }
         do {
-            if item.isPreviewableImage {
-                let data = try await client.download(path: item.path)
-                guard let image = NSImage(data: data) else {
-                    throw PreviewError.unsupportedImage
-                }
-                mediaPreview = MediaPreview(item: item, kind: .image(image), temporaryURL: nil)
-            } else if item.isPreviewableVideo {
-                let url = temporaryPreviewURL(for: item)
-                try FileManager.default.createDirectory(
-                    at: url.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try? FileManager.default.removeItem(at: url)
-                try await client.download(path: item.path, to: url)
-                mediaPreview = MediaPreview(item: item, kind: .video(url), temporaryURL: url)
-            }
+            let p = try await downloadPreview(for: item)
+            previewCache[item.path] = p
+            previewIndex = index
+            mediaPreview = p
+            updateCacheWindow(around: index)
         } catch {
             errorMessage = "Preview failed: \(error.localizedDescription)"
         }
-        isLoadingPreview = false
+    }
+
+    func previewNext() {
+        guard let idx = previewIndex, idx + 1 < previewableItems.count else { return }
+        Task { await preview(previewableItems[idx + 1]) }
+    }
+
+    func previewPrevious() {
+        guard let idx = previewIndex, idx > 0 else { return }
+        Task { await preview(previewableItems[idx - 1]) }
     }
 
     func closePreview() {
-        if let url = mediaPreview?.temporaryURL {
+        for (_, task) in prefetchTasks { task.cancel() }
+        prefetchTasks = [:]
+        for path in Array(previewCache.keys) { evictFromCache(path: path) }
+        mediaPreview = nil
+        previewIndex = nil
+    }
+
+    // MARK: - Private preview helpers
+
+    private func downloadPreview(for item: WebDavItem) async throws -> MediaPreview {
+        if item.isPreviewableImage {
+            let data = try await client.download(path: item.path)
+            guard let image = NSImage(data: data) else { throw PreviewError.unsupportedImage }
+            return MediaPreview(item: item, kind: .image(image), temporaryURL: nil)
+        } else {
+            let url = temporaryPreviewURL(for: item)
+            try? FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: url)
+            try await client.download(path: item.path, to: url)
+            return MediaPreview(item: item, kind: .video(url), temporaryURL: url)
+        }
+    }
+
+    // Evict items outside the ±5 window; kick off prefetches for items inside it.
+    private func updateCacheWindow(around index: Int) {
+        let all = previewableItems
+        guard !all.isEmpty else { return }
+        let lo = max(0, index - 5)
+        let hi = min(all.count - 1, index + 5)
+        let keepPaths = Set((lo...hi).map { all[$0].path })
+
+        // Evict out-of-window items
+        for path in Array(previewCache.keys) where !keepPaths.contains(path) {
+            evictFromCache(path: path)
+        }
+        for (path, task) in prefetchTasks where !keepPaths.contains(path) {
+            task.cancel()
+            prefetchTasks.removeValue(forKey: path)
+        }
+
+        // Prefetch items inside the window that aren't already cached or in-flight
+        for i in lo...hi where i != index {
+            let item = all[i]
+            guard previewCache[item.path] == nil, prefetchTasks[item.path] == nil else { continue }
+            let path = item.path
+            let t = Task { [weak self] in
+                guard let self else { return }
+                guard let p = try? await self.downloadPreview(for: item) else {
+                    self.prefetchTasks.removeValue(forKey: path)
+                    return
+                }
+                if Task.isCancelled {
+                    if let url = p.temporaryURL { try? FileManager.default.removeItem(at: url) }
+                } else {
+                    self.previewCache[path] = p
+                }
+                self.prefetchTasks.removeValue(forKey: path)
+            }
+            prefetchTasks[item.path] = t
+        }
+    }
+
+    private func evictFromCache(path: String) {
+        if let cached = previewCache.removeValue(forKey: path),
+           let url = cached.temporaryURL {
             try? FileManager.default.removeItem(at: url)
         }
-        mediaPreview = nil
     }
 
     // MARK: - Download (NSSavePanel)
@@ -193,7 +277,6 @@ final class FileBrowserViewModel: ObservableObject {
         panel.nameFieldStringValue = item.name
         panel.canCreateDirectories = true
         guard await panel.begin() == .OK, let dest = panel.url else { return }
-
         enqueueDownload(item, destination: dest)
     }
 
@@ -230,17 +313,13 @@ final class FileBrowserViewModel: ObservableObject {
         panel.canChooseDirectories = false
         panel.begin { [weak self] result in
             guard result == .OK, let self else { return }
-            let urls = panel.urls
-            self.prepareUploadFiles(urls)
+            self.prepareUploadFiles(panel.urls)
         }
     }
 
     func prepareUploadFiles(_ urls: [URL]) {
         let existingNames = Set(items.map { $0.name.lowercased() })
-        let conflicts = urls
-            .map(\.lastPathComponent)
-            .filter { existingNames.contains($0.lowercased()) }
-
+        let conflicts = urls.map(\.lastPathComponent).filter { existingNames.contains($0.lowercased()) }
         if !conflicts.isEmpty {
             pendingUploadConflict = PendingUploadConflict(urls: urls, conflictingNames: conflicts)
         } else {
@@ -254,9 +333,7 @@ final class FileBrowserViewModel: ObservableObject {
         enqueueUploads(pending.urls, renameConflicts: !overwrite)
     }
 
-    func cancelPendingConflict() {
-        pendingUploadConflict = nil
-    }
+    func cancelPendingConflict() { pendingUploadConflict = nil }
 
     private func enqueueUploads(_ urls: [URL], renameConflicts: Bool) {
         let existingNames = Set(items.map { $0.name.lowercased() })
@@ -346,9 +423,7 @@ final class FileBrowserViewModel: ObservableObject {
 
     private func startTransferQueueIfNeeded() {
         guard activeTransferTask == nil else { return }
-        activeTransferTask = Task { [weak self] in
-            await self?.processQueue()
-        }
+        activeTransferTask = Task { [weak self] in await self?.processQueue() }
     }
 
     private func processQueue() async {
@@ -370,7 +445,7 @@ final class FileBrowserViewModel: ObservableObject {
             transferProgress = 0.15
 
             switch job.kind {
-            case .upload: await runUpload(job)
+            case .upload:   await runUpload(job)
             case .download: await runDownload(job)
             }
 
@@ -378,7 +453,6 @@ final class FileBrowserViewModel: ObservableObject {
                 markTransfer(job.id, state: .cancelled, progress: 0, error: nil)
                 break
             }
-
             if let updatedIndex = transferQueue.firstIndex(where: { $0.id == job.id }),
                transferQueue[updatedIndex].state == .running {
                 markTransfer(job.id, state: .complete, progress: 1, error: nil)
@@ -418,7 +492,7 @@ final class FileBrowserViewModel: ObservableObject {
 
     private func temporaryPreviewURL(for item: WebDavItem) -> URL {
         let ext = (item.name as NSString).pathExtension
-        let fileName = ext.isEmpty ? "\(UUID().uuidString)" : "\(UUID().uuidString).\(ext)"
+        let fileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
         return FileManager.default.temporaryDirectory
             .appendingPathComponent("MiDoidPreviews", isDirectory: true)
             .appendingPathComponent(fileName)
@@ -427,7 +501,6 @@ final class FileBrowserViewModel: ObservableObject {
 
 private enum PreviewError: LocalizedError {
     case unsupportedImage
-
     var errorDescription: String? {
         switch self {
         case .unsupportedImage: return "This image format could not be previewed."

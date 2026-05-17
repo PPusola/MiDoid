@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:background="@color/sync_surface"
     android:clipToPadding="false"
-    android:paddingBottom="24dp"
+    android:paddingBottom="32dp"
     tools:context=".ui.SettingsActivity">
 
     <LinearLayout
@@ -15,7 +15,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingHorizontal="20dp"
-        android:paddingTop="20dp">
+        android:paddingTop="16dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/settingsToolbar"
@@ -25,12 +25,13 @@
             app:navigationIcon="@drawable/ic_arrow_back_24"
             app:title="@string/settings_title" />
 
+        <!-- Storage mode card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             app:cardBackgroundColor="@color/sync_surface_container"
-            app:cardCornerRadius="18dp"
+            app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
             app:strokeColor="@color/sync_outline"
             app:strokeWidth="1dp">
@@ -61,7 +62,7 @@
                     android:id="@+id/btnSettingsChooseFolder"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
-                    android:layout_marginTop="18dp"
+                    android:layout_marginTop="20dp"
                     android:text="@string/btn_choose_folder"
                     app:icon="@drawable/ic_folder_24" />
 
@@ -78,24 +79,26 @@
                     android:id="@+id/btnSettingsAppStorage"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
                     android:text="@string/btn_clear_folder" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSettingsPermissionInfo"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="44dp"
                     android:text="@string/btn_permission_info" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Privacy info card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             app:cardBackgroundColor="@color/sync_primary_container"
-            app:cardCornerRadius="18dp"
+            app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
             app:strokeWidth="0dp">
 
@@ -122,5 +125,6 @@
                     android:textColor="@color/sync_on_primary_container" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

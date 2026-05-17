@@ -6,14 +6,36 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import com.synccompanion.server.WebDavServer
 
+/**
+ * Wrapper around Android's [NsdManager] that advertises this device as a
+ * WebDAV sync endpoint on the local network using DNS-SD (Bonjour).
+ *
+ * The Mac companion app discovers this advertisement and uses the embedded
+ * `session_id` TXT record to verify it matches the QR code payload before
+ * attempting a WebDAV connection.
+ *
+ * @param context  Used to obtain the [NsdManager] system service.
+ */
 class NsdHelper(private val context: Context) {
 
     private val nsdManager: NsdManager =
         context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
     private var registrationListener: NsdManager.RegistrationListener? = null
+
+    /** The actual service name assigned by the system (may differ from the requested name if there's a conflict). */
     private var registeredServiceName: String? = null
 
+    /**
+     * Registers the WebDAV service under [SERVICE_TYPE] with the given [sessionId]
+     * embedded as a DNS TXT record attribute. The service is advertised on [WebDavServer.PORT].
+     *
+     * If a prior registration is still active it is unregistered before the new one
+     * is started, ensuring only one advertisement is live at a time.
+     *
+     * @param sessionId  UUID identifying the active session. Embedded as the `session_id`
+     *                   TXT attribute so the Mac companion can match it to the QR payload.
+     */
     fun register(sessionId: String) {
         if (registrationListener != null) unregister()
 
@@ -49,6 +71,13 @@ class NsdHelper(private val context: Context) {
         nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
     }
 
+    /**
+     * Unregisters the currently active NSD service advertisement.
+     *
+     * Safe to call even if no registration is active. Catches the [IllegalArgumentException]
+     * Android throws when attempting to unregister a listener that was never registered
+     * or has already been unregistered.
+     */
     fun unregister() {
         registrationListener?.let {
             try {
@@ -62,6 +91,8 @@ class NsdHelper(private val context: Context) {
 
     companion object {
         private const val TAG = "NsdHelper"
+
+        /** Bonjour service type used by both Android (advertiser) and the Mac companion app (discoverer). */
         const val SERVICE_TYPE = "_android-sync._tcp."
     }
 }

@@ -79,22 +79,39 @@ jobs:
           body: |
             ## MiDoid ${{ github.ref_name }}
 
-            ### What's included
+            ### What's new in v0.2
 
-            - Android companion app with QR pairing.
-            - macOS menu bar companion.
-            - Local WebDAV file browsing and transfer.
-            - Selected-folder sharing and optional All Files Access mode.
+            - Browse photos and videos directly inside the macOS app before downloading.
+            - Full-screen Mac media preview overlay with keyboard navigation and playback controls.
+            - Polished Android dashboard with clearer connection, storage, and session status.
+            - Refreshed Android dark theme and MiDoid launcher icons.
+            - Improved selected-folder and storage-mode handling on Android.
+            - More detailed Android server, session, WebDAV, QR pairing, and settings documentation in code.
+            - Updated Mac window behavior and file browser state management for a smoother file-manager feel.
+            - Better release packaging notes so users can find the APK and Mac ZIP from GitHub Releases.
 
             ### Install
 
-            1. Download and install `MiDoid-android-${{ github.ref_name }}-debug.apk` on Android.
-            2. Download and unzip `MiDoid-macOS-${{ github.ref_name }}.zip` on Mac.
-            3. Open the Mac app, then scan its QR code from the Android app.
+            1. Open the Assets section on this GitHub Release.
+            2. Download `MiDoid-android-${{ github.ref_name }}-debug.apk` on your Android device.
+            3. Download `MiDoid-macOS-${{ github.ref_name }}.zip` on your Mac.
+            4. On Android, install the APK from your downloads folder and allow sideloading if Android asks.
+            5. On Mac, unzip the Mac release and open MiDoid.
+            6. Scan the Mac QR code from the Android app.
+            7. Choose the folder or storage mode Android should share with the Mac.
 
             ### Notes
 
             - MiDoid is local-first and does not use cloud servers.
+            - Your Mac and Android device must be on the same local Wi-Fi network.
             - The Android APK is currently a debug/sideload build.
             - Optional All Files Access is intended for personal or sideloaded use.
             - The macOS ZIP may show Gatekeeper warnings until signing and notarization are added.
+            - If macOS reports the network is offline while using a local IP address, allow MiDoid access to Local Network in macOS privacy settings.
+
+            ### Still planned
+
+            - Signed Android release APK.
+            - Signed and notarized macOS app.
+            - Stronger transfer queue, retry, and conflict handling.
+            - More user-facing tests around large files, sleep/reconnect, and folder browsing.

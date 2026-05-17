@@ -10,26 +10,30 @@ struct FileBrowserView: View {
     @State private var isDropTarget = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            if let message = viewModel.errorMessage {
-                errorBanner(message)
+        ZStack {
+            VStack(spacing: 0) {
+                toolbar
                 Divider()
+                if let message = viewModel.errorMessage {
+                    errorBanner(message)
+                    Divider()
+                }
+                fileContent
+                transferPanel
+                Divider()
+                statusBar
             }
-            fileContent
-            transferPanel
-            Divider()
-            statusBar
+
+            if viewModel.mediaPreview != nil {
+                MediaPreviewOverlay(viewModel: viewModel)
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
         .frame(minWidth: 640, minHeight: 400)
+        .animation(.easeInOut(duration: 0.18), value: viewModel.mediaPreview != nil)
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTarget) { providers in
             handleDrop(providers)
-        }
-        .sheet(item: $viewModel.mediaPreview, onDismiss: {
-            viewModel.closePreview()
-        }) { preview in
-            MediaPreviewView(preview: preview)
         }
         .alert("New Folder", isPresented: $showNewFolderAlert) {
             TextField("Folder name", text: $newFolderName)
@@ -78,11 +82,11 @@ struct FileBrowserView: View {
                             Text(crumb.name)
                                 .lineLimit(1)
                         }
-                            .buttonStyle(.plain)
-                            .font(idx == viewModel.breadcrumbs.count - 1
-                                  ? .callout.weight(.semibold) : .callout)
-                            .foregroundColor(idx == viewModel.breadcrumbs.count - 1
-                                             ? .primary : .secondary)
+                        .buttonStyle(.plain)
+                        .font(idx == viewModel.breadcrumbs.count - 1
+                              ? .callout.weight(.semibold) : .callout)
+                        .foregroundColor(idx == viewModel.breadcrumbs.count - 1
+                                         ? .primary : .secondary)
                     }
                 }
             }
@@ -383,37 +387,181 @@ struct FileBrowserView: View {
     }
 }
 
-private struct MediaPreviewView: View {
-    let preview: MediaPreview
+// MARK: - Media preview overlay
+
+private struct MediaPreviewOverlay: View {
+    @ObservedObject var viewModel: FileBrowserViewModel
+    @State private var player: AVPlayer? = nil
+    @State private var isExpanded = false
+    @State private var monitor: Any? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label(preview.item.name, systemImage: preview.item.sfSymbol)
-                    .lineLimit(1)
-                Spacer()
-            }
-            .padding(12)
-            .background(.regularMaterial)
+        ZStack {
+            Color.black.opacity(0.96)
+                .ignoresSafeArea()
 
+            if let preview = viewModel.mediaPreview {
+                VStack(spacing: 0) {
+                    headerBar(preview: preview)
+                    mediaContent(preview: preview)
+                }
+            } else {
+                ProgressView()
+                    .scaleEffect(1.4)
+                    .tint(.white)
+            }
+        }
+        .onAppear {
+            setupPlayer(for: viewModel.mediaPreview)
+            installKeyboardMonitor()
+        }
+        .onDisappear {
+            tearDownKeyboardMonitor()
+            player?.pause()
+        }
+        .onChange(of: viewModel.previewIndex) { _ in
+            isExpanded = false
+            setupPlayer(for: viewModel.mediaPreview)
+        }
+    }
+
+    private func headerBar(preview: MediaPreview) -> some View {
+        HStack(spacing: 12) {
+            Group {
+                if let index = viewModel.previewIndex {
+                    Text("\(index + 1) / \(viewModel.previewableItems.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.white.opacity(0.55))
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(minWidth: 52, alignment: .leading)
+
+            Spacer()
+
+            Text(preview.item.name)
+                .font(.callout.weight(.medium))
+                .foregroundColor(.white)
+                .lineLimit(1)
+
+            Spacer()
+
+            HStack(spacing: 18) {
+                if case .image = preview.kind {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                    } label: {
+                        Image(systemName: isExpanded
+                              ? "arrow.down.right.and.arrow.up.left"
+                              : "arrow.up.left.and.arrow.down.right")
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(isExpanded ? "Fit to window" : "Expand to fill")
+                }
+
+                Button {
+                    viewModel.closePreview()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.white.opacity(0.75))
+                        .font(.system(size: 20))
+                }
+                .buttonStyle(.borderless)
+                .help("Close  (Esc)")
+            }
+            .frame(minWidth: 52, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.45))
+    }
+
+    @ViewBuilder
+    private func mediaContent(preview: MediaPreview) -> some View {
+        ZStack {
             switch preview.kind {
             case .image(let image):
                 Image(nsImage: image)
                     .resizable()
-                    .scaledToFit()
+                    .aspectRatio(contentMode: isExpanded ? .fill : .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.92))
-            case .video(let url):
-                VideoPlayer(player: AVPlayer(url: url))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
+                    .clipped()
+
+            case .video:
+                if let p = player {
+                    VideoPlayer(player: p)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+
+            if viewModel.isLoadingPreview {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                ProgressView()
+                    .scaleEffect(1.4)
+                    .tint(.white)
+            }
+
+            HStack {
+                navButton(isLeft: true)
+                Spacer()
+                navButton(isLeft: false)
             }
         }
-        .frame(minWidth: 720, minHeight: 520)
-        .onDisappear {
-            if let url = preview.temporaryURL {
-                try? FileManager.default.removeItem(at: url)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func navButton(isLeft: Bool) -> some View {
+        let enabled = isLeft ? viewModel.hasPreviousPreview : viewModel.hasNextPreview
+        return Button {
+            if isLeft { viewModel.previewPrevious() } else { viewModel.previewNext() }
+        } label: {
+            Image(systemName: isLeft ? "chevron.left" : "chevron.right")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 68)
+                .background(
+                    Color.white.opacity(enabled ? 0.14 : 0.04),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+        }
+        .buttonStyle(.borderless)
+        .disabled(!enabled)
+        .padding(isLeft ? .leading : .trailing, 14)
+    }
+
+    private func setupPlayer(for preview: MediaPreview?) {
+        player?.pause()
+        player = nil
+        guard case .video(let url) = preview?.kind else { return }
+        let p = AVPlayer(url: url)
+        p.play()
+        player = p
+    }
+
+    private func installKeyboardMonitor() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            switch event.keyCode {
+            case 123: // ←
+                if viewModel.hasPreviousPreview { viewModel.previewPrevious() }
+                return nil
+            case 124: // →
+                if viewModel.hasNextPreview { viewModel.previewNext() }
+                return nil
+            case 53: // Esc
+                viewModel.closePreview()
+                return nil
+            default:
+                return event
             }
         }
+    }
+
+    private func tearDownKeyboardMonitor() {
+        guard let m = monitor else { return }
+        NSEvent.removeMonitor(m)
+        monitor = nil
     }
 }

@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ======== EARS ======== -->
+
+    <!-- Left ear outer -->
+    <path
+        android:fillColor="#141414"
+        android:pathData="M 12,40 L 14,6 L 44,32 Z"/>
+    <!-- Right ear outer -->
+    <path
+        android:fillColor="#141414"
+        android:pathData="M 96,40 L 94,6 L 64,32 Z"/>
+
+    <!-- Left inner ear (warm dark) -->
+    <path
+        android:fillColor="#1E0C0C"
+        android:pathData="M 15,38 L 18,10 L 42,33 Z"/>
+    <!-- Right inner ear -->
+    <path
+        android:fillColor="#1E0C0C"
+        android:pathData="M 93,38 L 90,10 L 66,33 Z"/>
+
+    <!-- Left ear tufts (NFC lynx tips) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2C2C2C"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M 14,8 L 10,0"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#282828"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M 17,6 L 14,0"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#242424"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M 20,5 L 18,0"/>
+
+    <!-- Right ear tufts -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2C2C2C"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M 94,8 L 98,0"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#282828"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M 91,6 L 94,0"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#242424"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M 88,5 L 90,0"/>
+
+    <!-- ======== HEAD ======== -->
+
+    <!-- Cheek ruffs (extra NFC fluff on the sides) -->
+    <path
+        android:fillColor="#0F0F0F"
+        android:pathData="M 12,58 C 4,68 4,86 16,92 C 12,80 10,66 12,62 Z"/>
+    <path
+        android:fillColor="#0F0F0F"
+        android:pathData="M 96,58 C 104,68 104,86 92,92 C 96,80 98,66 96,62 Z"/>
+
+    <!-- Main head: wide cheekbones, rounded chin — NFC triangular shape -->
+    <path
+        android:fillColor="#141414"
+        android:pathData="M 54,28
+            C 36,28 14,38 12,56
+            C 10,74 20,92 54,94
+            C 88,92 98,74 96,56
+            C 94,38 72,28 54,28 Z"/>
+
+    <!-- Subtle forehead fur depth -->
+    <path
+        android:fillColor="#111111"
+        android:pathData="M 54,30 C 46,32 38,36 34,42 C 42,36 54,33 54,30 Z"/>
+    <path
+        android:fillColor="#111111"
+        android:pathData="M 54,30 C 62,32 70,36 74,42 C 66,36 54,33 54,30 Z"/>
+
+    <!-- ======== EYES ======== -->
+
+    <!-- Left eye — outer dark amber glow -->
+    <path
+        android:fillColor="#7A3D00"
+        android:pathData="M 28,56 C 28,49 32,45 38,46
+            C 44,47 48,51 48,57
+            C 48,63 44,66 38,65
+            C 32,64 28,63 28,56 Z"/>
+    <!-- Left iris — warm amber -->
+    <path
+        android:fillColor="#FF8C00"
+        android:pathData="M 30,56 C 30,50 33,47 38,48
+            C 43,49 46,53 46,57
+            C 46,62 43,65 38,64
+            C 33,63 30,62 30,56 Z"/>
+    <!-- Left pupil — vertical slit -->
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M 38,48 C 40,48 41,52 41,57
+            C 41,62 40,64 38,64
+            C 36,64 35,62 35,57
+            C 35,52 36,48 38,48 Z"/>
+    <!-- Left eye shine -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 32,50 C 34,48 37,49 36,52 C 35,53 32,52 32,50 Z"/>
+
+    <!-- Right eye — outer dark amber glow -->
+    <path
+        android:fillColor="#7A3D00"
+        android:pathData="M 80,56 C 80,49 76,45 70,46
+            C 64,47 60,51 60,57
+            C 60,63 64,66 70,65
+            C 76,64 80,63 80,56 Z"/>
+    <!-- Right iris — warm amber -->
+    <path
+        android:fillColor="#FF8C00"
+        android:pathData="M 78,56 C 78,50 75,47 70,48
+            C 65,49 62,53 62,57
+            C 62,62 65,65 70,64
+            C 75,63 78,62 78,56 Z"/>
+    <!-- Right pupil — vertical slit -->
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M 70,48 C 72,48 73,52 73,57
+            C 73,62 72,64 70,64
+            C 68,64 67,62 67,57
+            C 67,52 68,48 70,48 Z"/>
+    <!-- Right eye shine -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 72,50 C 74,48 77,49 76,52 C 75,53 72,52 72,50 Z"/>
+
+    <!-- ======== NOSE ======== -->
+    <path
+        android:fillColor="#BB3030"
+        android:pathData="M 51,70 L 54,65 L 57,70 L 54,75 Z"/>
+
+    <!-- ======== MOUTH ======== -->
+    <!-- Philtrum -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2E2E2E"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M 54,75 L 54,78"/>
+    <!-- Left curve -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2E2E2E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M 54,78 Q 47,84 42,82"/>
+    <!-- Right curve -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2E2E2E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M 54,78 Q 61,84 66,82"/>
+
+    <!-- ======== WHISKERS ======== -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 4,63 L 38,67"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 2,69 L 37,70"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 5,75 L 38,73"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 104,63 L 70,67"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 106,69 L 71,70"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#383838"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 103,75 L 70,73"/>
+
+    <!-- ======== CHEST RUFF ======== -->
+    <!-- NFC signature thick mane -->
+    <path
+        android:fillColor="#0D0D0D"
+        android:pathData="M 30,92 C 24,100 26,108 54,108 C 82,108 84,100 78,92 L 54,94 Z"/>
+    <!-- Centre chest tuft -->
+    <path
+        android:fillColor="#161616"
+        android:pathData="M 40,102 C 46,107 54,108 62,105 C 55,103 53,105 46,102 Z"/>
+
+</vector>

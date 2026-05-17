@@ -23,9 +23,6 @@
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
 
-    <!-- Hide from Dock and App Switcher — menu bar only -->
-    <key>LSUIElement</key>
-    <true/>
 
     <!-- Minimum macOS 13 (Ventura) — required for CryptoKit Curve25519 -->
     <key>LSMinimumSystemVersion</key>

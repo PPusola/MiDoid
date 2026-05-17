@@ -20,6 +20,19 @@ import com.synccompanion.server.WebDavServer
 import com.synccompanion.session.SessionManager
 import com.synccompanion.ui.MainActivity
 
+/**
+ * Foreground service that keeps the WebDAV server and mDNS advertisement alive
+ * while a sync session is active.
+ *
+ * Lifecycle:
+ * 1. Started by [com.synccompanion.ui.SessionDurationSheet] after the user confirms a session.
+ * 2. Validates the session token, starts the persistent notification, launches [WebDavServer],
+ *    and registers the device with [NsdHelper] so the Mac can discover it via Bonjour.
+ * 3. Checks session expiry every [EXPIRY_CHECK_INTERVAL_MS] ms on the main thread;
+ *    automatically stops if the session expires or is revoked.
+ * 4. Can be stopped explicitly via the "End Session" notification action (sends [ACTION_STOP])
+ *    or from [MainActivity] when the user taps "End Session".
+ */
 class SyncService : Service() {
 
     private lateinit var sessionManager: SessionManager
@@ -27,6 +40,12 @@ class SyncService : Service() {
     private var webDavServer: WebDavServer? = null
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * Periodic Runnable posted every [EXPIRY_CHECK_INTERVAL_MS] on the main thread.
+     * Stops the service if [SessionManager.checkAndRevokeIfExpired] returns `false`
+     * (i.e. the session has expired), otherwise refreshes the notification countdown label.
+     */
     private val expiryCheckRunnable = object : Runnable {
         override fun run() {
             if (!sessionManager.checkAndRevokeIfExpired()) {
@@ -38,12 +57,29 @@ class SyncService : Service() {
         }
     }
 
+    /** Initializes [SessionManager] and [NsdHelper]. The WebDAV server is not started here. */
     override fun onCreate() {
         super.onCreate()
         sessionManager = SessionManager(this)
         nsdHelper = NsdHelper(this)
     }
 
+    /**
+     * Handles service start intents. Two paths are supported:
+     *
+     * - **[ACTION_STOP]**: revokes the active session and stops the service immediately.
+     * - **Normal start**: validates the session token from [SessionManager], promotes the
+     *   service to foreground with a persistent notification, launches [WebDavServer] on
+     *   [WebDavServer.PORT], and begins mDNS advertisement via [NsdHelper].
+     *
+     * Returns [START_NOT_STICKY] on any failure so Android does not attempt to restart
+     * the service without a valid, unexpired session.
+     *
+     * @param intent   The start intent; may carry [EXTRA_IN_MEMORY_SESSION] and [EXTRA_SESSION_ID]
+     *                 for sessions that should not survive a device restart.
+     * @param flags    Standard service flags (unused).
+     * @param startId  Unique ID for this start request (unused).
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
 
@@ -67,7 +103,14 @@ class SyncService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
-        webDavServer = WebDavServer(createStorageBackend(), token).also { it.start() }
+        try {
+            webDavServer = WebDavServer(createStorageBackend(), token).also { it.start() }
+        } catch (e: Exception) {
+            android.util.Log.e("SyncService", "WebDAV server failed to start: ${e.message}")
+            sessionManager.revokeSession()
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val sessionId = session?.sessionId ?: intent?.getStringExtra(EXTRA_SESSION_ID) ?: ""
         nsdHelper.register(sessionId)
@@ -77,6 +120,7 @@ class SyncService : Service() {
         return START_STICKY
     }
 
+    /** Cancels the expiry timer, unregisters the mDNS advertisement, and shuts down the WebDAV server. */
     override fun onDestroy() {
         handler.removeCallbacks(expiryCheckRunnable)
         nsdHelper.unregister()
@@ -84,11 +128,22 @@ class SyncService : Service() {
         super.onDestroy()
     }
 
+    /** This service does not support binding; returns `null`. */
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Returns `true` if the start intent carries [EXTRA_IN_MEMORY_SESSION], indicating
+     * an "ends on disconnect" session that was not persisted to encrypted prefs.
+     */
     private fun isInMemorySessionActive(intent: Intent?): Boolean =
         intent?.getBooleanExtra(EXTRA_IN_MEMORY_SESSION, false) == true
 
+    /**
+     * Selects the appropriate [StorageBackend] based on the user's granted permissions:
+     * 1. A user-selected SAF folder ([DocumentTreeStorageBackend]) if one was saved in prefs.
+     * 2. Full external storage root ([FileStorageBackend]) if MANAGE_EXTERNAL_STORAGE is granted (Android 11+).
+     * 3. App-private external files directory as a safe fallback requiring no special permission.
+     */
     private fun createStorageBackend(): StorageBackend {
         val selectedFolder = sessionManager.repository.loadSharedFolderUri()
         if (selectedFolder != null) {
@@ -105,6 +160,10 @@ class SyncService : Service() {
         return FileStorageBackend(getExternalFilesDir(null) ?: filesDir, "MiDoid Storage")
     }
 
+    /**
+     * Updates the persistent notification with the current session countdown text.
+     * Called every [EXPIRY_CHECK_INTERVAL_MS] by [expiryCheckRunnable].
+     */
     private fun updateNotification() {
         val remaining = sessionManager.repository.remainingMs()
         val label = if (remaining > 0) {
@@ -116,6 +175,12 @@ class SyncService : Service() {
         nm.notify(NOTIFICATION_ID, buildNotification(label))
     }
 
+    /**
+     * Constructs the foreground service notification with an "Open" content intent
+     * and an "End" action that sends [ACTION_STOP].
+     *
+     * @param contentText  Secondary text shown below the notification title.
+     */
     private fun buildNotification(contentText: String = "Tap to view session"): android.app.Notification {
         val openIntent = PendingIntent.getActivity(
             this, 0,
@@ -138,6 +203,7 @@ class SyncService : Service() {
             .build()
     }
 
+    /** Creates the notification channel required for foreground services on Android 8+. */
     private fun createNotificationChannel() {
         val channel = NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel_name), NotificationManager.IMPORTANCE_LOW).apply {
             description = getString(R.string.notif_channel_desc)
@@ -149,9 +215,21 @@ class SyncService : Service() {
     companion object {
         private const val CHANNEL_ID = "sync_channel"
         private const val NOTIFICATION_ID = 1
+
+        /** How often the expiry check runs, in milliseconds. */
         private const val EXPIRY_CHECK_INTERVAL_MS = 60_000L
+
+        /** Intent action that tells the service to revoke the session and shut down. */
         const val ACTION_STOP = "com.synccompanion.STOP"
+
+        /** Intent extra carrying the session UUID for in-memory (no-persist) sessions. */
         const val EXTRA_SESSION_ID = "session_id"
+
+        /**
+         * Intent extra (Boolean) that marks a start as an in-memory-only session.
+         * When `true`, [SessionManager.checkAndRevokeIfExpired] never kills the session
+         * due to a missing persisted record.
+         */
         const val EXTRA_IN_MEMORY_SESSION = "in_memory_session"
     }
 }

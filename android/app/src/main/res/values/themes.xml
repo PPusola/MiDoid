@@ -1,15 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.SyncCompanion" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.SyncCompanion" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Primary (amber) -->
         <item name="colorPrimary">@color/sync_primary</item>
         <item name="colorOnPrimary">@color/sync_on_primary</item>
         <item name="colorPrimaryContainer">@color/sync_primary_container</item>
         <item name="colorOnPrimaryContainer">@color/sync_on_primary_container</item>
+
+        <!-- Secondary (muted blue) -->
         <item name="colorSecondary">@color/sync_secondary</item>
         <item name="colorSecondaryContainer">@color/sync_secondary_container</item>
         <item name="colorOnSecondaryContainer">@color/sync_on_secondary_container</item>
+
+        <!-- Surfaces -->
+        <item name="colorSurface">@color/sync_surface</item>
+        <item name="colorOnSurface">@color/sync_on_surface</item>
+        <item name="colorSurfaceVariant">@color/sync_surface_container</item>
+        <item name="colorOnSurfaceVariant">@color/sync_on_surface_variant</item>
+        <item name="colorOutline">@color/sync_outline</item>
+        <item name="android:colorBackground">@color/sync_surface</item>
+
+        <!-- System bars -->
         <item name="android:colorAccent">@color/sync_primary</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/sync_surface</item>
         <item name="android:navigationBarColor">@color/sync_surface</item>
     </style>
 </resources>

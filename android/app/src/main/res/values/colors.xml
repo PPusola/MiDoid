@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="sync_primary">#146C63</color>
-    <color name="sync_on_primary">#FFFFFF</color>
-    <color name="sync_primary_container">#BCECE3</color>
-    <color name="sync_on_primary_container">#003731</color>
-    <color name="sync_secondary">#4B6078</color>
-    <color name="sync_secondary_container">#D5E4F7</color>
-    <color name="sync_on_secondary_container">#071D33</color>
-    <color name="sync_surface">#F7FAF9</color>
-    <color name="sync_surface_container">#FFFFFF</color>
-    <color name="sync_outline">#D8E1DF</color>
-    <color name="sync_success">#207245</color>
+    <!-- Primary: amber accent (matches cat eye color in icon) -->
+    <color name="sync_primary">#E8960C</color>
+    <color name="sync_on_primary">#2A1600</color>
+    <color name="sync_primary_container">#201608</color>
+    <color name="sync_on_primary_container">#FFD080</color>
+
+    <!-- Secondary: muted nordic blue -->
+    <color name="sync_secondary">#7AA3C0</color>
+    <color name="sync_secondary_container">#152840</color>
+    <color name="sync_on_secondary_container">#BDD8EF</color>
+
+    <!-- Surfaces: deep navy -->
+    <color name="sync_surface">#0D1B2A</color>
+    <color name="sync_surface_container">#122235</color>
+    <color name="sync_on_surface">#D8E8F4</color>
+    <color name="sync_on_surface_variant">#7AA3C0</color>
+
+    <!-- Outline and success -->
+    <color name="sync_outline">#1D3454</color>
+    <color name="sync_success">#4CAF7E</color>
 </resources>
