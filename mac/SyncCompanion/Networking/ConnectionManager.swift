@@ -40,7 +40,7 @@ final class ConnectionManager: NSObject {
 
     private func startQR(sessionId: String, token: String) {
         guard let ip = lanIP() else {
-            sessionState.setError("No Wi-Fi IP found. Connect your Mac to the same local network as Android.")
+            sessionState.setError("No local network address found. MiDoid does not need internet, but your Mac must be on the same Wi-Fi or LAN as Android.")
             return
         }
         let expiresAt = Int64(Date().timeIntervalSince1970) + 60
@@ -93,19 +93,39 @@ final class ConnectionManager: NSObject {
         defer { freeifaddrs(ifaddr) }
 
         var ptr = ifaddr
+        var fallback: String?
         while let ifa = ptr {
             let name   = String(cString: ifa.pointee.ifa_name)
+            let flags = Int32(ifa.pointee.ifa_flags)
             let family = ifa.pointee.ifa_addr.pointee.sa_family
-            if family == UInt8(AF_INET), name.hasPrefix("en") {
+            let isUsableInterface = (flags & IFF_UP) != 0
+                && (flags & IFF_RUNNING) != 0
+                && (flags & IFF_LOOPBACK) == 0
+                && !name.hasPrefix("utun")
+                && !name.hasPrefix("awdl")
+                && !name.hasPrefix("llw")
+
+            if family == UInt8(AF_INET), isUsableInterface {
                 var addr = ifa.pointee.ifa_addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
                 var buf  = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
                 inet_ntop(AF_INET, &addr.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN))
                 let ip = String(cString: buf)
-                if ip != "127.0.0.1" { return ip }
+                if isPrivateIPv4(ip) { return ip }
+                if fallback == nil, ip != "127.0.0.1" { fallback = ip }
             }
             ptr = ifa.pointee.ifa_next
         }
-        return nil
+        return fallback
+    }
+
+    private func isPrivateIPv4(_ ip: String) -> Bool {
+        let parts = ip.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        if parts[0] == 10 { return true }
+        if parts[0] == 172 && (16...31).contains(parts[1]) { return true }
+        if parts[0] == 192 && parts[1] == 168 { return true }
+        if parts[0] == 169 && parts[1] == 254 { return true }
+        return false
     }
 }
 

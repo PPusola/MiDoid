@@ -148,6 +148,10 @@ struct MenuBarView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
+            Text("Internet access is not required.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
             Button("Try Again") { manager.generateSession() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
