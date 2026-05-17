@@ -27,6 +27,7 @@ MiDoid is early open-source software. The current GitHub release is meant for pe
 - Upload, download, delete, and folder creation support
 - Drag-and-drop uploads on macOS
 - Search, Finder-like breadcrumbs, file type icons, and a transfer queue
+- Photo and video previews in the macOS file manager
 - Storage mode settings and visible local-only security status on Android
 
 ## Requirements
@@ -147,6 +148,7 @@ After connection, the Mac file manager lets you:
 
 - Browse Android folders
 - Open folders with double-click
+- Preview photos and videos with double-click, the Preview button, or Space
 - Search the current folder
 - Upload files with the upload button
 - Drag files from Finder into the MiDoid window to upload

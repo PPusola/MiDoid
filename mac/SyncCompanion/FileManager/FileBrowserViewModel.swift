@@ -32,6 +32,18 @@ struct PendingUploadConflict: Identifiable {
     let conflictingNames: [String]
 }
 
+enum MediaPreviewKind {
+    case image(NSImage)
+    case video(URL)
+}
+
+struct MediaPreview: Identifiable {
+    let id = UUID()
+    let item: WebDavItem
+    let kind: MediaPreviewKind
+    let temporaryURL: URL?
+}
+
 @MainActor
 final class FileBrowserViewModel: ObservableObject {
     @Published var items: [WebDavItem] = []
@@ -45,6 +57,8 @@ final class FileBrowserViewModel: ObservableObject {
     @Published var transferQueue: [TransferJob] = []
     @Published var searchText = ""
     @Published var pendingUploadConflict: PendingUploadConflict?
+    @Published var mediaPreview: MediaPreview?
+    @Published var isLoadingPreview = false
 
     let client: WebDavClient
     private var pathStack: [String] = ["/"]
@@ -111,6 +125,7 @@ final class FileBrowserViewModel: ObservableObject {
 
     func activate(_ item: WebDavItem) {
         if item.isDirectory { navigate(to: item.path) }
+        else if item.isPreviewableMedia { Task { await preview(item) } }
         else { Task { await download(item) } }
     }
 
@@ -133,6 +148,42 @@ final class FileBrowserViewModel: ObservableObject {
 
     func reconnect() {
         Task { await load(path: currentPath) }
+    }
+
+    // MARK: - Media preview
+
+    func preview(_ item: WebDavItem) async {
+        guard item.isPreviewableMedia else { return }
+        isLoadingPreview = true
+        errorMessage = nil
+        do {
+            if item.isPreviewableImage {
+                let data = try await client.download(path: item.path)
+                guard let image = NSImage(data: data) else {
+                    throw PreviewError.unsupportedImage
+                }
+                mediaPreview = MediaPreview(item: item, kind: .image(image), temporaryURL: nil)
+            } else if item.isPreviewableVideo {
+                let url = temporaryPreviewURL(for: item)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? FileManager.default.removeItem(at: url)
+                try await client.download(path: item.path, to: url)
+                mediaPreview = MediaPreview(item: item, kind: .video(url), temporaryURL: url)
+            }
+        } catch {
+            errorMessage = "Preview failed: \(error.localizedDescription)"
+        }
+        isLoadingPreview = false
+    }
+
+    func closePreview() {
+        if let url = mediaPreview?.temporaryURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        mediaPreview = nil
     }
 
     // MARK: - Download (NSSavePanel)
@@ -363,5 +414,23 @@ final class FileBrowserViewModel: ObservableObject {
             counter += 1
         }
         return candidate
+    }
+
+    private func temporaryPreviewURL(for item: WebDavItem) -> URL {
+        let ext = (item.name as NSString).pathExtension
+        let fileName = ext.isEmpty ? "\(UUID().uuidString)" : "\(UUID().uuidString).\(ext)"
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("MiDoidPreviews", isDirectory: true)
+            .appendingPathComponent(fileName)
+    }
+}
+
+private enum PreviewError: LocalizedError {
+    case unsupportedImage
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedImage: return "This image format could not be previewed."
+        }
     }
 }

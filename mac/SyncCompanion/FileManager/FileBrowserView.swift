@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVKit
 import UniformTypeIdentifiers
 
 struct FileBrowserView: View {
@@ -24,6 +25,11 @@ struct FileBrowserView: View {
         .frame(minWidth: 640, minHeight: 400)
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTarget) { providers in
             handleDrop(providers)
+        }
+        .sheet(item: $viewModel.mediaPreview, onDismiss: {
+            viewModel.closePreview()
+        }) { preview in
+            MediaPreviewView(preview: preview)
         }
         .alert("New Folder", isPresented: $showNewFolderAlert) {
             TextField("Folder name", text: $newFolderName)
@@ -123,6 +129,16 @@ struct FileBrowserView: View {
             .keyboardShortcut("u", modifiers: [.command])
 
             Button {
+                Task { await previewSelection() }
+            } label: {
+                Image(systemName: "eye")
+            }
+            .buttonStyle(.borderless)
+            .disabled(selectedPreviewItem == nil || viewModel.isLoadingPreview)
+            .help("Preview Selected")
+            .keyboardShortcut(.space, modifiers: [])
+
+            Button {
                 Task { await viewModel.deleteSelected() }
             } label: {
                 Image(systemName: "trash")
@@ -178,41 +194,57 @@ struct FileBrowserView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Table(viewModel.filteredItems, selection: $viewModel.selection) {
-                TableColumn("Name") { item in
-                    Label(item.name, systemImage: item.sfSymbol)
-                        .lineLimit(1)
-                }
-                .width(min: 180, ideal: 340)
-
-                TableColumn("Size") { item in
-                    Text(item.displaySize)
-                        .foregroundColor(.secondary)
-                }
-                .width(90)
-
-                TableColumn("Modified") { item in
-                    Text(item.modified.map { relativeDate($0) } ?? "—")
-                        .foregroundColor(.secondary)
-                }
-                .width(130)
-            }
-            .contextMenu(forSelectionType: String.self) { ids in
-                if let id = ids.first,
-                   let item = viewModel.items.first(where: { $0.id == id }) {
-                    if !item.isDirectory {
-                        Button("Download") { Task { await viewModel.download(item) } }
+            ZStack {
+                Table(viewModel.filteredItems, selection: $viewModel.selection) {
+                    TableColumn("Name") { item in
+                        Label(item.name, systemImage: item.sfSymbol)
+                            .lineLimit(1)
                     }
-                    Divider()
-                    Button("Delete", role: .destructive) {
-                        viewModel.selection = ids
-                        Task { await viewModel.deleteSelected() }
+                    .width(min: 180, ideal: 340)
+
+                    TableColumn("Size") { item in
+                        Text(item.displaySize)
+                            .foregroundColor(.secondary)
+                    }
+                    .width(90)
+
+                    TableColumn("Modified") { item in
+                        Text(item.modified.map { relativeDate($0) } ?? "—")
+                            .foregroundColor(.secondary)
+                    }
+                    .width(130)
+                }
+                .contextMenu(forSelectionType: String.self) { ids in
+                    if let id = ids.first,
+                       let item = viewModel.items.first(where: { $0.id == id }) {
+                        if item.isPreviewableMedia {
+                            Button("Preview") { Task { await viewModel.preview(item) } }
+                        }
+                        if !item.isDirectory {
+                            Button("Download") { Task { await viewModel.download(item) } }
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) {
+                            viewModel.selection = ids
+                            Task { await viewModel.deleteSelected() }
+                        }
+                    }
+                } primaryAction: { ids in
+                    if let id = ids.first,
+                       let item = viewModel.items.first(where: { $0.id == id }) {
+                        viewModel.activate(item)
                     }
                 }
-            } primaryAction: { ids in
-                if let id = ids.first,
-                   let item = viewModel.items.first(where: { $0.id == id }) {
-                    viewModel.activate(item)
+
+                if viewModel.isLoadingPreview {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading preview…")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(18)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             .overlay {
@@ -297,6 +329,16 @@ struct FileBrowserView: View {
         return "\(names)\(suffix) already exists in this folder."
     }
 
+    private var selectedPreviewItem: WebDavItem? {
+        guard viewModel.selection.count == 1,
+              let id = viewModel.selection.first,
+              let item = viewModel.items.first(where: { $0.id == id }),
+              item.isPreviewableMedia else {
+            return nil
+        }
+        return item
+    }
+
     private func relativeDate(_ date: Date) -> String {
         RelativeDateTimeFormatter().localizedString(for: date, relativeTo: .now)
     }
@@ -333,5 +375,45 @@ struct FileBrowserView: View {
             viewModel.prepareUploadFiles(urls.filter { !$0.hasDirectoryPath })
         }
         return true
+    }
+
+    private func previewSelection() async {
+        guard let item = selectedPreviewItem else { return }
+        await viewModel.preview(item)
+    }
+}
+
+private struct MediaPreviewView: View {
+    let preview: MediaPreview
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label(preview.item.name, systemImage: preview.item.sfSymbol)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(12)
+            .background(.regularMaterial)
+
+            switch preview.kind {
+            case .image(let image):
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.92))
+            case .video(let url):
+                VideoPlayer(player: AVPlayer(url: url))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+            }
+        }
+        .frame(minWidth: 720, minHeight: 520)
+        .onDisappear {
+            if let url = preview.temporaryURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 }

@@ -22,6 +22,26 @@ struct WebDavItem: Identifiable, Hashable {
         }
     }
 
+    var isPreviewableImage: Bool {
+        guard !isDirectory else { return false }
+        switch (name as NSString).pathExtension.lowercased() {
+        case "jpg", "jpeg", "png", "gif", "heic", "webp": return true
+        default: return false
+        }
+    }
+
+    var isPreviewableVideo: Bool {
+        guard !isDirectory else { return false }
+        switch (name as NSString).pathExtension.lowercased() {
+        case "mp4", "mov", "m4v": return true
+        default: return false
+        }
+    }
+
+    var isPreviewableMedia: Bool {
+        isPreviewableImage || isPreviewableVideo
+    }
+
     var displaySize: String {
         guard !isDirectory else { return "—" }
         let d = Double(size)
