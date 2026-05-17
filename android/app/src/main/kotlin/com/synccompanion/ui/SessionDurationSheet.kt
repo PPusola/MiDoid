@@ -80,7 +80,8 @@ class SessionDurationSheet : BottomSheetDialogFragment() {
         repository.authorizeSession(
             token      = payload.token,
             sessionId  = payload.sessionId,
-            durationMs = durationMs
+            durationMs = durationMs,
+            macIp      = payload.macIp
         )
 
         ctx.startForegroundService(

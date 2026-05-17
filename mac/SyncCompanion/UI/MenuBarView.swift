@@ -83,8 +83,12 @@ struct MenuBarView: View {
                 .font(.system(size: 44))
                 .foregroundColor(.secondary)
                 .padding(.bottom, 4)
-            Text("Open SyncCompanion on your\nAndroid phone and scan the QR")
+            Text("Open MiDoid on your Android phone\nand scan this QR code")
                 .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Text("Local network only. No cloud servers.")
+                .font(.caption2)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -95,9 +99,13 @@ struct MenuBarView: View {
     private var connectingView: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text("Connecting…")
+            Text("Waiting for Android…")
                 .font(.callout)
                 .foregroundColor(.secondary)
+            Text("Keep both devices on the same Wi-Fi network.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -111,6 +119,15 @@ struct MenuBarView: View {
                 .padding(.bottom, 4)
             Text("Android is connected")
                 .font(.callout.weight(.medium))
+            if case .connected(let ip, let port, _, _) = state.status {
+                Text("\(ip):\(port)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+                Text("Session is local-only and ends when disconnected.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
             Button("Open File Manager") {
                 manager.openFileManager()
             }
@@ -167,7 +184,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(.secondary)
-            .help("Quit SyncCompanion")
+            .help("Quit MiDoid")
         }
     }
 }

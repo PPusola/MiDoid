@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SyncCompanion — one-time Mac setup script
+# MiDoid — one-time Mac setup script
 # Run once after cloning: bash mac/setup.sh
 set -euo pipefail
 
@@ -66,23 +66,23 @@ mkdir -p "$LAUNCH_AGENTS"
 # Determine path to the built Mac app
 APP_PATH=""
 CANDIDATES=(
-    "/Applications/SyncCompanion.app"
-    "$HOME/Applications/SyncCompanion.app"
-    "$(cd "$(dirname "$0")/.." && pwd)/mac/build/Release/SyncCompanion.app"
+    "/Applications/MiDoid.app"
+    "$HOME/Applications/MiDoid.app"
+    "$(cd "$(dirname "$0")/.." && pwd)/mac/build/Release/MiDoid.app"
 )
 for c in "${CANDIDATES[@]}"; do
     if [ -d "$c" ]; then APP_PATH="$c"; break; fi
 done
 
 if [ -z "$APP_PATH" ]; then
-    warn "SyncCompanion.app not found in standard locations."
+    warn "MiDoid.app not found in standard locations."
     warn "Build it in Xcode first, then update the ProgramArguments in:"
     warn "  $PLIST_DST"
-    APP_PATH="/Applications/SyncCompanion.app"  # placeholder
+    APP_PATH="/Applications/MiDoid.app"  # placeholder
 fi
 
 # Substitute real app path into plist template
-sed "s|__APP_PATH__|${APP_PATH}/Contents/MacOS/SyncCompanion|g" \
+sed "s|__APP_PATH__|${APP_PATH}/Contents/MacOS/MiDoid|g" \
     "$PLIST_SRC" > "$PLIST_DST"
 chmod 644 "$PLIST_DST"
 info "LaunchAgent installed: $PLIST_DST"
@@ -90,16 +90,16 @@ info "LaunchAgent installed: $PLIST_DST"
 # Unload first in case it's already registered, then reload
 launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
-info "LaunchAgent loaded — SyncCompanion will start at login."
+info "LaunchAgent loaded — MiDoid will start at login."
 
 # ─── Done ───────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}Setup complete!${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Build SyncCompanion.app in Xcode (mac/SyncCompanion.xcodeproj)"
+echo "  1. Build MiDoid.app in Xcode (mac/SyncCompanion.xcodeproj)"
 echo "  2. Open the app — a QR code will appear in your menu bar"
-echo "  3. Install SyncCompanion APK on your Android phone"
+echo "  3. Install the MiDoid APK on your Android phone"
 echo "  4. Tap 'Scan Mac QR' in the Android app and point at the menu bar QR"
 echo "  5. Choose a session duration — your Android storage will mount in Finder"
 echo ""

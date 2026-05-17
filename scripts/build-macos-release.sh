@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:-0.1.0}"
 DERIVED_DATA="$ROOT_DIR/build/macos"
-APP_PATH="$DERIVED_DATA/Build/Products/Release/SyncCompanion.app"
+APP_PATH="$DERIVED_DATA/Build/Products/Release/MiDoid.app"
 ZIP_DEST="$ROOT_DIR/dist/MiDoid-macOS-$VERSION.zip"
 
 if ! xcodebuild -version >/dev/null 2>&1; then

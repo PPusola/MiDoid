@@ -96,13 +96,13 @@ class SyncService : Service() {
                 context = this,
                 resolver = contentResolver,
                 treeUri = selectedFolder,
-                rootDisplayName = "Android Folder"
+                rootDisplayName = "MiDoid Folder"
             )
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
             return FileStorageBackend(Environment.getExternalStorageDirectory(), "Android Storage")
         }
-        return FileStorageBackend(getExternalFilesDir(null) ?: filesDir)
+        return FileStorageBackend(getExternalFilesDir(null) ?: filesDir, "MiDoid Storage")
     }
 
     private fun updateNotification() {
@@ -128,19 +128,19 @@ class SyncService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Mac Sync Active")
+            .setContentTitle(getString(R.string.notif_title))
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_sync)
             .setContentIntent(openIntent)
-            .addAction(R.drawable.ic_sync, "End Session", stopIntent)
+            .addAction(R.drawable.ic_sync, getString(R.string.notif_action_end), stopIntent)
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "Mac Sync", NotificationManager.IMPORTANCE_LOW).apply {
-            description = "Shows while phone is connected to Mac"
+        val channel = NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel_name), NotificationManager.IMPORTANCE_LOW).apply {
+            description = getString(R.string.notif_channel_desc)
             setShowBadge(false)
         }
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)

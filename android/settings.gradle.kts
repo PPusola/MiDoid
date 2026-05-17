@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SyncCompanion"
+rootProject.name = "MiDoid"
 include(":app")

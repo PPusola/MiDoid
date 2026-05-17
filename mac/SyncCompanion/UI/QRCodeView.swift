@@ -75,7 +75,7 @@ struct QRCodeView: View {
                 if secondsLeft > 0 {
                     Image(systemName: Icons.clock)
                         .font(.caption2)
-                    Text("Refreshes in \(secondsLeft)s")
+                    Text("Scan within \(secondsLeft)s")
                         .font(.caption)
                         .monospacedDigit()
                 } else {

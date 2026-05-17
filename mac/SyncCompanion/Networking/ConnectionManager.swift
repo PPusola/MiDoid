@@ -40,7 +40,7 @@ final class ConnectionManager: NSObject {
 
     private func startQR(sessionId: String, token: String) {
         guard let ip = lanIP() else {
-            sessionState.setError("No Wi-Fi IP found. Connect to a network.")
+            sessionState.setError("No Wi-Fi IP found. Connect your Mac to the same local network as Android.")
             return
         }
         let expiresAt = Int64(Date().timeIntervalSince1970) + 60

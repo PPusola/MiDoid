@@ -22,6 +22,18 @@ MiDoid is designed for local file access. File sharing starts only after the And
 
 Selected-folder access uses Android's standard permission model. Optional All Files Access can expose shared Android storage for personal use, but it should be treated as an advanced mode.
 
+## Security Model
+
+MiDoid is built around visible, temporary access:
+
+- Pairing starts with a Mac-generated QR code.
+- Android asks how long the session should last.
+- Android shows a foreground notification while sharing is active.
+- The Mac can only see the selected folder, app storage, or shared storage mode chosen by the Android user.
+- Transfers stay on the local network and do not use MiDoid cloud servers.
+
+See [SECURITY.md](SECURITY.md) for the threat model and permission details.
+
 ## Install
 
 Prebuilt release files are published on the GitHub Releases page when available:

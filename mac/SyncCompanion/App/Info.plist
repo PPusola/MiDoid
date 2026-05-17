@@ -6,10 +6,10 @@
     <string>com.synccompanion.mac</string>
 
     <key>CFBundleName</key>
-    <string>SyncCompanion</string>
+    <string>MiDoid</string>
 
     <key>CFBundleDisplayName</key>
-    <string>SyncCompanion</string>
+    <string>MiDoid</string>
 
     <key>CFBundleVersion</key>
     <string>1</string>
@@ -21,7 +21,7 @@
     <string>APPL</string>
 
     <key>CFBundleExecutable</key>
-    <string>SyncCompanion</string>
+    <string>$(EXECUTABLE_NAME)</string>
 
     <!-- Hide from Dock and App Switcher — menu bar only -->
     <key>LSUIElement</key>
@@ -33,7 +33,7 @@
 
     <!-- Required for NetService mDNS browsing -->
     <key>NSLocalNetworkUsageDescription</key>
-    <string>SyncCompanion discovers your Android phone on the local Wi-Fi network.</string>
+    <string>MiDoid discovers your Android phone on the local Wi-Fi network.</string>
 
     <!-- Bonjour service types needed for NetServiceBrowser -->
     <key>NSBonjourServices</key>
@@ -43,9 +43,9 @@
 
     <!-- Required for sshfs process execution -->
     <key>NSAppleEventsUsageDescription</key>
-    <string>SyncCompanion mounts your Android phone as a drive using sshfs.</string>
+    <string>MiDoid opens local Android file sessions from your Mac.</string>
 
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 SyncCompanion. All rights reserved.</string>
+    <string>Copyright © 2026 MiDoid. All rights reserved.</string>
 </dict>
 </plist>

@@ -58,7 +58,7 @@ private fun childPath(parentPath: String, childName: String): String {
 
 class FileStorageBackend(
     private val root: File,
-    override val rootDisplayName: String = "Android Workspace"
+    override val rootDisplayName: String = "MiDoid Storage"
 ) : StorageBackend {
 
     private val rootCanon: File get() = root.canonicalFile
@@ -133,7 +133,7 @@ class DocumentTreeStorageBackend(
     context: Context,
     private val resolver: ContentResolver,
     treeUri: Uri,
-    override val rootDisplayName: String = "Android Folder"
+    override val rootDisplayName: String = "MiDoid Folder"
 ) : StorageBackend {
 
     private val root = DocumentFile.fromTreeUri(context, treeUri)

@@ -19,7 +19,7 @@ object WebDavHandler {
     fun handle(req: HttpRequest, storage: StorageBackend, token: String): HttpResponse {
         if (!checkAuth(req, token)) return HttpResponse(
             401, "Unauthorized",
-            extraHeaders = mapOf("WWW-Authenticate" to "Basic realm=\"SyncCompanion\"")
+            extraHeaders = mapOf("WWW-Authenticate" to "Basic realm=\"MiDoid\"")
         )
         return when (req.method) {
             "OPTIONS"      -> options()

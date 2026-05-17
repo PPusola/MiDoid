@@ -35,7 +35,7 @@
 		AA100014 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
 		AA100015 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
 		AA100016 /* FileManagerWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileManagerWindow.swift; sourceTree = "<group>"; };
-		AA200001 /* SyncCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SyncCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA200001 /* MiDoid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MiDoid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,7 +120,7 @@
 		AA300009 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA200001 /* SyncCompanion.app */,
+				AA200001 /* MiDoid.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -141,8 +141,8 @@
 			dependencies = (
 			);
 			name = SyncCompanion;
-			productName = SyncCompanion;
-			productReference = AA200001 /* SyncCompanion.app */;
+			productName = MiDoid;
+			productReference = AA200001 /* MiDoid.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -219,7 +219,7 @@
 				INFOPLIST_FILE = SyncCompanion/App/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.synccompanion.mac;
-				PRODUCT_NAME = SyncCompanion;
+				PRODUCT_NAME = MiDoid;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -237,7 +237,7 @@
 				INFOPLIST_FILE = SyncCompanion/App/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.synccompanion.mac;
-				PRODUCT_NAME = SyncCompanion;
+				PRODUCT_NAME = MiDoid;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};

@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: Icons.phone, accessibilityDescription: "SyncCompanion")
+        button.image = NSImage(systemSymbolName: Icons.phone, accessibilityDescription: "MiDoid")
         button.image?.isTemplate = true
         button.action = #selector(togglePopover)
         button.target = self
