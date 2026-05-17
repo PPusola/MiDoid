@@ -17,9 +17,12 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
         let vm     = FileBrowserViewModel(client: client)
         let hc     = NSHostingController(rootView: FileBrowserView(viewModel: vm))
         let w      = NSWindow(contentViewController: hc)
-        w.title = "Android Files — \(ip)"
-        w.setContentSize(NSSize(width: 720, height: 520))
+        w.title = "MiDoid - Android Files"
+        w.subtitle = ip
+        w.setContentSize(NSSize(width: 860, height: 600))
         w.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        w.toolbarStyle = .unifiedCompact
+        w.tabbingMode = .preferred
         w.delegate = self
         w.center()
         w.makeKeyAndOrderFront(nil)

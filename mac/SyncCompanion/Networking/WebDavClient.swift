@@ -74,32 +74,74 @@ final class WebDavClient {
         return r
     }
 
+    private func validate(_ response: URLResponse, allowed: Set<Int>) throws {
+        guard let http = response as? HTTPURLResponse else { return }
+        guard allowed.contains(http.statusCode) else {
+            throw WebDavError.httpStatus(http.statusCode)
+        }
+    }
+
     // MARK: - WebDAV verbs
 
     func propfind(path: String) async throws -> [WebDavItem] {
-        let (data, _) = try await session.data(for: req(method: "PROPFIND", path: path,
-                                                         extra: ["Depth": "1"]))
+        let (data, response) = try await session.data(for: req(method: "PROPFIND", path: path,
+                                                               extra: ["Depth": "1"]))
+        try validate(response, allowed: [207])
         return PropfindParser.parse(data: data, requestedPath: path)
     }
 
     func download(path: String) async throws -> Data {
-        let (data, _) = try await session.data(for: req(method: "GET", path: path))
+        let (data, response) = try await session.data(for: req(method: "GET", path: path))
+        try validate(response, allowed: [200])
         return data
     }
 
+    func download(path: String, to destination: URL) async throws {
+        let (tempURL, response) = try await session.download(for: req(method: "GET", path: path))
+        try validate(response, allowed: [200])
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: tempURL, to: destination)
+    }
+
     func upload(path: String, data: Data) async throws {
-        _ = try await session.data(for: req(method: "PUT", path: path,
-                                            extra: ["Content-Type": "application/octet-stream",
-                                                    "Content-Length": "\(data.count)"],
-                                            body: data))
+        let (_, response) = try await session.data(for: req(method: "PUT", path: path,
+                                                            extra: ["Content-Type": "application/octet-stream",
+                                                                    "Content-Length": "\(data.count)"],
+                                                            body: data))
+        try validate(response, allowed: [200, 201, 204])
+    }
+
+    func upload(path: String, fileURL: URL) async throws {
+        let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        var request = req(method: "PUT", path: path, extra: [
+            "Content-Type": "application/octet-stream",
+            "Content-Length": "\(size)"
+        ])
+        request.httpBody = nil
+        let (_, response) = try await session.upload(for: request, fromFile: fileURL)
+        try validate(response, allowed: [200, 201, 204])
     }
 
     func delete(path: String) async throws {
-        _ = try await session.data(for: req(method: "DELETE", path: path))
+        let (_, response) = try await session.data(for: req(method: "DELETE", path: path))
+        try validate(response, allowed: [200, 202, 204])
     }
 
     func mkcol(path: String) async throws {
-        _ = try await session.data(for: req(method: "MKCOL", path: path))
+        let (_, response) = try await session.data(for: req(method: "MKCOL", path: path))
+        try validate(response, allowed: [200, 201, 204])
+    }
+}
+
+enum WebDavError: LocalizedError {
+    case httpStatus(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .httpStatus(let code): return "WebDAV request failed with HTTP \(code)."
+        }
     }
 }
 

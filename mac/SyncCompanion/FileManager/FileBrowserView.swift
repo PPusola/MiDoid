@@ -1,20 +1,30 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct FileBrowserView: View {
     @StateObject var viewModel: FileBrowserViewModel
     @State private var showNewFolderAlert = false
     @State private var newFolderName = ""
+    @State private var isDropTarget = false
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
+            if let message = viewModel.errorMessage {
+                errorBanner(message)
+                Divider()
+            }
             fileContent
+            transferPanel
             Divider()
             statusBar
         }
         .frame(minWidth: 640, minHeight: 400)
+        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTarget) { providers in
+            handleDrop(providers)
+        }
         .alert("New Folder", isPresented: $showNewFolderAlert) {
             TextField("Folder name", text: $newFolderName)
             Button("Create") {
@@ -24,13 +34,15 @@ struct FileBrowserView: View {
             }
             Button("Cancel", role: .cancel) { newFolderName = "" }
         }
-        .alert("Error", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
+        .alert("File already exists", isPresented: Binding(
+            get: { viewModel.pendingUploadConflict != nil },
+            set: { if !$0 { viewModel.cancelPendingConflict() } }
         )) {
-            Button("OK", role: .cancel) { viewModel.errorMessage = nil }
+            Button("Replace") { viewModel.uploadPendingConflict(overwrite: true) }
+            Button("Keep Both") { viewModel.uploadPendingConflict(overwrite: false) }
+            Button("Cancel", role: .cancel) { viewModel.cancelPendingConflict() }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            Text(conflictMessage)
         }
     }
 
@@ -41,20 +53,25 @@ struct FileBrowserView: View {
             Button(action: viewModel.goBack) {
                 Image(systemName: "chevron.left")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .foregroundColor(viewModel.canGoBack ? .primary : .secondary)
             .disabled(!viewModel.canGoBack)
+            .help("Back")
 
-            // Breadcrumb
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
+                HStack(spacing: 4) {
                     ForEach(Array(viewModel.breadcrumbs.enumerated()), id: \.offset) { idx, crumb in
                         if idx > 0 {
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                        Button(crumb.name) { viewModel.navigate(to: crumb.path) }
+                        Button {
+                            viewModel.navigate(to: crumb.path)
+                        } label: {
+                            Text(crumb.name)
+                                .lineLimit(1)
+                        }
                             .buttonStyle(.plain)
                             .font(idx == viewModel.breadcrumbs.count - 1
                                   ? .callout.weight(.semibold) : .callout)
@@ -66,36 +83,79 @@ struct FileBrowserView: View {
 
             Spacer()
 
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("Search", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(width: 180)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+
+            Button(action: viewModel.reconnect) {
+                Image(systemName: "wifi")
+            }
+            .buttonStyle(.borderless)
+            .help("Reconnect")
+            .keyboardShortcut("k", modifiers: [.command])
+
             Button(action: viewModel.refresh) {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help("Refresh")
+            .keyboardShortcut("r", modifiers: [.command])
 
             Button { showNewFolderAlert = true } label: {
                 Image(systemName: "folder.badge.plus")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help("New Folder")
+            .keyboardShortcut("n", modifiers: [.command, .shift])
 
             Button(action: viewModel.uploadToCurrentFolder) {
                 Image(systemName: "arrow.up.circle")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help("Upload Files")
+            .keyboardShortcut("u", modifiers: [.command])
 
             Button {
                 Task { await viewModel.deleteSelected() }
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .foregroundColor(viewModel.selection.isEmpty ? .secondary : .red)
             .disabled(viewModel.selection.isEmpty)
             .help("Delete Selected")
+            .keyboardShortcut(.delete, modifiers: [])
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text(message)
+                .font(.callout)
+                .lineLimit(2)
+            Spacer()
+            Button {
+                viewModel.errorMessage = nil
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.10))
     }
 
     // MARK: - File list
@@ -105,28 +165,31 @@ struct FileBrowserView: View {
         if viewModel.isLoading {
             ProgressView("Loading…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.items.isEmpty {
+        } else if viewModel.filteredItems.isEmpty {
             VStack(spacing: 10) {
-                Image(systemName: "folder")
+                Image(systemName: isDropTarget ? "tray.and.arrow.down.fill" : "folder")
                     .font(.system(size: 40))
-                    .foregroundColor(.secondary)
-                Text("Empty folder")
+                    .foregroundColor(isDropTarget ? .accentColor : .secondary)
+                Text(viewModel.emptyStateTitle)
+                    .font(.headline)
+                Text(viewModel.emptyStateMessage)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Table(viewModel.items, selection: $viewModel.selection) {
+            Table(viewModel.filteredItems, selection: $viewModel.selection) {
                 TableColumn("Name") { item in
                     Label(item.name, systemImage: item.sfSymbol)
                         .lineLimit(1)
                 }
-                .width(min: 160, ideal: 280)
+                .width(min: 180, ideal: 340)
 
                 TableColumn("Size") { item in
                     Text(item.displaySize)
                         .foregroundColor(.secondary)
                 }
-                .width(80)
+                .width(90)
 
                 TableColumn("Modified") { item in
                     Text(item.modified.map { relativeDate($0) } ?? "—")
@@ -152,6 +215,52 @@ struct FileBrowserView: View {
                     viewModel.activate(item)
                 }
             }
+            .overlay {
+                if isDropTarget {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                        .padding(10)
+                }
+            }
+        }
+    }
+
+    // MARK: - Transfers
+
+    @ViewBuilder
+    private var transferPanel: some View {
+        if !viewModel.transferQueue.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Transfers", systemImage: "arrow.up.arrow.down")
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Button("Retry Failed") { viewModel.retryFailedTransfers() }
+                        .disabled(!viewModel.transferQueue.contains { $0.state == .failed || $0.state == .cancelled })
+                    Button("Cancel") { viewModel.cancelTransfers() }
+                        .disabled(!viewModel.isTransferring)
+                }
+
+                ForEach(viewModel.transferQueue.suffix(4)) { job in
+                    HStack(spacing: 8) {
+                        Image(systemName: job.kind == .upload ? "arrow.up.circle" : "arrow.down.circle")
+                            .foregroundColor(transferColor(job.state))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(job.name)
+                                .lineLimit(1)
+                            Text(job.error ?? "\(job.kind.rawValue) · \(job.state.rawValue)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        ProgressView(value: job.progress)
+                            .frame(width: 110)
+                    }
+                }
+            }
+            .padding(12)
+            .background(.regularMaterial)
         }
     }
 
@@ -159,7 +268,12 @@ struct FileBrowserView: View {
 
     private var statusBar: some View {
         HStack {
-            Text(viewModel.items.isEmpty ? "No items" : "\(viewModel.items.count) item\(viewModel.items.count == 1 ? "" : "s")")
+            Text(viewModel.items.isEmpty ? "No items" : viewModel.fileSummary)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Divider()
+                .frame(height: 12)
+            Text("Connected to \(viewModel.endpointLabel)")
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
@@ -176,7 +290,48 @@ struct FileBrowserView: View {
         .padding(.vertical, 5)
     }
 
+    private var conflictMessage: String {
+        guard let conflict = viewModel.pendingUploadConflict else { return "" }
+        let names = conflict.conflictingNames.prefix(3).joined(separator: ", ")
+        let suffix = conflict.conflictingNames.count > 3 ? " and \(conflict.conflictingNames.count - 3) more" : ""
+        return "\(names)\(suffix) already exists in this folder."
+    }
+
     private func relativeDate(_ date: Date) -> String {
         RelativeDateTimeFormatter().localizedString(for: date, relativeTo: .now)
+    }
+
+    private func transferColor(_ state: TransferState) -> Color {
+        switch state {
+        case .queued: return .secondary
+        case .running: return .accentColor
+        case .complete: return .green
+        case .failed: return .red
+        case .cancelled: return .orange
+        }
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        let group = DispatchGroup()
+        var urls: [URL] = []
+
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                if let url = item as? URL {
+                    urls.append(url)
+                } else if let data = item as? Data,
+                          let string = String(data: data, encoding: .utf8),
+                          let url = URL(string: string) {
+                    urls.append(url)
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            viewModel.prepareUploadFiles(urls.filter { !$0.hasDirectoryPath })
+        }
+        return true
     }
 }

@@ -71,6 +71,12 @@ final class ConnectionManager: NSObject {
         generateSession()
     }
 
+    func reconnect() {
+        FileManagerWindow.shared.close()
+        sessionState.setIdle()
+        generateSession()
+    }
+
     // MARK: - Token generation
 
     private func randomToken() -> String {

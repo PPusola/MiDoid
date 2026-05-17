@@ -15,6 +15,9 @@ The Mac app displays a QR code, the Android app scans it, and a temporary authen
 - Selected-folder sharing with Android's Storage Access Framework
 - Optional All Files Access mode for personal or sideloaded builds
 - Upload, download, delete, and folder creation support
+- Drag-and-drop uploads on macOS
+- Search, Finder-like breadcrumbs, file type icons, and a transfer queue
+- Storage mode settings and visible local-only security status on Android
 
 ## Privacy
 
@@ -48,6 +51,7 @@ Early macOS ZIP builds may be unsigned and can show Gatekeeper warnings. Android
 ## Build Releases
 
 Release instructions live in [docs/RELEASE.md](docs/RELEASE.md).
+Product and release polish plans live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Local release builds:
 

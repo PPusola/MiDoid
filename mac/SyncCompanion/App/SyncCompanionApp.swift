@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var eventMonitor: Any?
+    private var wakeObserver: Any?
 
     private var sessionState: SessionState!
     private var connectionManager: ConnectionManager!
@@ -35,10 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         connectionManager.generateSession()
         startIconSync()
+        startWakeRecovery()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let monitor = eventMonitor { NSEvent.removeMonitor(monitor) }
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
         FileManagerWindow.shared.close()
     }
 
@@ -75,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hc.sizingOptions = []
         let pop = NSPopover()
         pop.contentViewController = hc
-        pop.contentSize = NSSize(width: 260, height: 340)
+        pop.contentSize = NSSize(width: 320, height: 360)
         pop.behavior = .semitransient
         pop.animates = true
         popover = pop
@@ -88,6 +93,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let button = self.statusItem?.button else { return }
             DispatchQueue.main.async {
                 button.contentTintColor = self.sessionState.menuBarTint
+            }
+        }
+    }
+
+    private func startWakeRecovery() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.connectionManager.reconnect()
             }
         }
     }

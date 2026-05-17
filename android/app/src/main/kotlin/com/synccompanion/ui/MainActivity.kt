@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.fabScan.setOnClickListener { onScanTapped() }
+        binding.btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnEndSession.setOnClickListener { onEndSessionTapped() }
         binding.btnChooseFolder.setOnClickListener { folderPicker.launch(null) }
         binding.btnAllowAllFiles.setOnClickListener { openAllFilesSettings() }

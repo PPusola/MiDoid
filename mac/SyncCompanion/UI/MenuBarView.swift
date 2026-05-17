@@ -166,11 +166,26 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+
+                Button(action: { manager.reconnect() }) {
+                    Label("Reconnect", systemImage: Icons.refresh)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
 
             Spacer()
 
             if case .displayingQR = state.status {
+                Button(action: { manager.generateSession() }) {
+                    Image(systemName: Icons.refresh)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .help("Generate new QR code")
+            } else if case .connected = state.status {
+                EmptyView()
+            } else {
                 Button(action: { manager.generateSession() }) {
                     Image(systemName: Icons.refresh)
                 }

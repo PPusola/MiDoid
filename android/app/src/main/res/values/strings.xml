@@ -30,6 +30,13 @@
     <string name="btn_clear_folder">Use App Storage</string>
     <string name="btn_permission_info">Permission Details</string>
     <string name="btn_scan_mac_qr">Scan Mac QR</string>
+    <string name="settings_title">Settings</string>
+    <string name="storage_mode_title">Storage mode</string>
+    <string name="storage_mode_selected">Selected folder: %1$s</string>
+    <string name="storage_mode_all_files">All shared storage is available</string>
+    <string name="storage_mode_app_storage">App storage only</string>
+    <string name="privacy_title">Private by default</string>
+    <string name="privacy_body">MiDoid only serves files while a session is active. Use Selected Folder for the safest setup. All Files Access is optional and intended for personal sideloaded builds.</string>
     <string name="status_connected">Connected to Mac</string>
     <string name="status_connected_subtitle">Session active with %1$s</string>
     <string name="status_connected_until_disconnect">Ends when Mac disconnects</string>
