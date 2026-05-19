@@ -79,16 +79,16 @@ jobs:
           body: |
             ## MiDoid ${{ github.ref_name }}
 
-            ### What's new in v0.2
+            ### What's new in v0.3
 
-            - Browse photos and videos directly inside the macOS app before downloading.
-            - Full-screen Mac media preview overlay with keyboard navigation and playback controls.
-            - Polished Android dashboard with clearer connection, storage, and session status.
-            - Refreshed Android dark theme and MiDoid launcher icons.
-            - Improved selected-folder and storage-mode handling on Android.
-            - More detailed Android server, session, WebDAV, QR pairing, and settings documentation in code.
-            - Updated Mac window behavior and file browser state management for a smoother file-manager feel.
-            - Better release packaging notes so users can find the APK and Mac ZIP from GitHub Releases.
+            - New split-pane macOS file browser with Android files on the left and rich details on the right.
+            - Added a visible Kind column for clearer file types such as images, videos, PDFs, archives, audio, and folders.
+            - Added right-pane previews for images and PDFs, with full-screen media preview support.
+            - Added folder-level upload and download support through the existing local WebDAV session.
+            - Added multi-select download actions for moving several files or folders at once.
+            - Added safer delete confirmation before removing files or folders from Android.
+            - Improved transfer panel details for folder transfers, including current file context.
+            - Updated the Mac file manager window size and minimum size for the split-pane layout.
 
             ### Install
 
@@ -113,5 +113,6 @@ jobs:
 
             - Signed Android release APK.
             - Signed and notarized macOS app.
-            - Stronger transfer queue, retry, and conflict handling.
-            - More user-facing tests around large files, sleep/reconnect, and folder browsing.
+            - More accurate transfer progress for very large folder operations.
+            - Stronger conflict handling for recursive folder uploads.
+            - Local notification mirroring research and privacy design.

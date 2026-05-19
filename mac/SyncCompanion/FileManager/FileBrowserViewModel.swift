@@ -24,6 +24,9 @@ struct TransferJob: Identifiable, Equatable {
     var progress: Double
     var state: TransferState
     var error: String?
+    var isFolder: Bool = false
+    var currentFile: String? = nil
+    var fileProgress: String? = nil
 }
 
 struct PendingUploadConflict: Identifiable {
@@ -35,6 +38,7 @@ struct PendingUploadConflict: Identifiable {
 enum MediaPreviewKind {
     case image(NSImage)
     case video(URL)
+    case pdf(URL)
 }
 
 struct MediaPreview: Identifiable {
@@ -60,6 +64,9 @@ final class FileBrowserViewModel: ObservableObject {
     @Published var mediaPreview: MediaPreview?
     @Published var isLoadingPreview = false
     @Published var previewIndex: Int? = nil
+    @Published var pendingDeleteItems: [WebDavItem]? = nil
+    @Published var detailPreview: MediaPreview? = nil
+    @Published var isLoadingDetailPreview = false
 
     let client: WebDavClient
     private var pathStack: [String] = ["/"]
@@ -73,7 +80,6 @@ final class FileBrowserViewModel: ObservableObject {
     var canGoBack: Bool { pathStack.count > 1 }
     var endpointLabel: String { "\(client.ip):\(client.port)" }
 
-    // All previewable items in the current directory (images + videos)
     var previewableItems: [WebDavItem] { items.filter { $0.isPreviewableMedia } }
     var hasPreviousPreview: Bool { (previewIndex ?? 0) > 0 }
     var hasNextPreview: Bool {
@@ -114,6 +120,18 @@ final class FileBrowserViewModel: ObservableObject {
         return "\(folders) folder\(folders == 1 ? "" : "s"), \(files) file\(files == 1 ? "" : "s")"
     }
 
+    var selectedItemsTotalSize: Int64 {
+        selectedItems.filter { !$0.isDirectory }.reduce(0) { $0 + $1.size }
+    }
+
+    var selectedItemsSizeLabel: String {
+        let d = Double(selectedItemsTotalSize)
+        if d < 1_024          { return "\(selectedItemsTotalSize) B" }
+        if d < 1_048_576      { return String(format: "%.1f KB", d / 1_024) }
+        if d < 1_073_741_824  { return String(format: "%.1f MB", d / 1_048_576) }
+        return String(format: "%.2f GB", d / 1_073_741_824)
+    }
+
     init(client: WebDavClient) {
         self.client = client
         Task { await load(path: "/") }
@@ -122,7 +140,10 @@ final class FileBrowserViewModel: ObservableObject {
     // MARK: - Navigation
 
     func load(path: String) async {
-        if path != currentPath { closePreview() }
+        if path != currentPath {
+            closePreview()
+            clearDetailPreview()
+        }
         isLoading = true
         errorMessage = nil
         do {
@@ -163,7 +184,7 @@ final class FileBrowserViewModel: ObservableObject {
 
     func reconnect() { Task { await load(path: currentPath) } }
 
-    // MARK: - Media preview
+    // MARK: - Media preview (full-screen overlay)
 
     func preview(_ item: WebDavItem) async {
         guard item.isPreviewableMedia else { return }
@@ -207,6 +228,38 @@ final class FileBrowserViewModel: ObservableObject {
         previewIndex = nil
     }
 
+    // MARK: - Detail pane preview (right-pane thumbnail)
+
+    func loadDetailPreview(for item: WebDavItem) {
+        guard item.isPreviewableMedia else {
+            clearDetailPreview()
+            return
+        }
+        if let cached = previewCache[item.path] {
+            detailPreview = cached
+            return
+        }
+        isLoadingDetailPreview = true
+        let targetPath = item.path
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let p = try await self.downloadPreview(for: item)
+                self.previewCache[p.item.path] = p
+                // Only display if this item is still selected
+                if self.selection.contains(targetPath) {
+                    self.detailPreview = p
+                }
+            } catch { }
+            self.isLoadingDetailPreview = false
+        }
+    }
+
+    func clearDetailPreview() {
+        detailPreview = nil
+        isLoadingDetailPreview = false
+    }
+
     // MARK: - Private preview helpers
 
     private func downloadPreview(for item: WebDavItem) async throws -> MediaPreview {
@@ -220,11 +273,11 @@ final class FileBrowserViewModel: ObservableObject {
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: url)
             try await client.download(path: item.path, to: url)
-            return MediaPreview(item: item, kind: .video(url), temporaryURL: url)
+            let kind: MediaPreviewKind = item.isPreviewableVideo ? .video(url) : .pdf(url)
+            return MediaPreview(item: item, kind: kind, temporaryURL: url)
         }
     }
 
-    // Evict items outside the ±5 window; kick off prefetches for items inside it.
     private func updateCacheWindow(around index: Int) {
         let all = previewableItems
         guard !all.isEmpty else { return }
@@ -232,7 +285,6 @@ final class FileBrowserViewModel: ObservableObject {
         let hi = min(all.count - 1, index + 5)
         let keepPaths = Set((lo...hi).map { all[$0].path })
 
-        // Evict out-of-window items
         for path in Array(previewCache.keys) where !keepPaths.contains(path) {
             evictFromCache(path: path)
         }
@@ -241,9 +293,11 @@ final class FileBrowserViewModel: ObservableObject {
             prefetchTasks.removeValue(forKey: path)
         }
 
-        // Prefetch items inside the window that aren't already cached or in-flight
         for i in lo...hi where i != index {
             let item = all[i]
+            // Only prefetch images — videos and PDFs can be 100s of MB and will
+            // overwhelm the single-threaded Android server with concurrent downloads.
+            guard item.isPreviewableImage else { continue }
             guard previewCache[item.path] == nil, prefetchTasks[item.path] == nil else { continue }
             let path = item.path
             let t = Task { [weak self] in
@@ -270,14 +324,50 @@ final class FileBrowserViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Download (NSSavePanel)
+    // MARK: - Download
 
     func download(_ item: WebDavItem) async {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = item.name
+        if item.isDirectory {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.prompt = "Download Here"
+            guard await panel.begin() == .OK, let dest = panel.url else { return }
+            enqueueFolderDownload(item, destination: dest.appendingPathComponent(item.name))
+        } else {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = item.name
+            panel.canCreateDirectories = true
+            guard await panel.begin() == .OK, let dest = panel.url else { return }
+            enqueueDownload(item, destination: dest)
+        }
+    }
+
+    func downloadSelectedItems() async {
+        let toDownload = selectedItems
+        guard !toDownload.isEmpty else { return }
+
+        if toDownload.count == 1 {
+            await download(toDownload[0])
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
         panel.canCreateDirectories = true
+        panel.prompt = "Download Here"
+        panel.message = "Choose a destination for \(toDownload.count) items"
         guard await panel.begin() == .OK, let dest = panel.url else { return }
-        enqueueDownload(item, destination: dest)
+
+        for item in toDownload {
+            if item.isDirectory {
+                enqueueFolderDownload(item, destination: dest.appendingPathComponent(item.name))
+            } else {
+                enqueueDownload(item, destination: dest.appendingPathComponent(item.name))
+            }
+        }
     }
 
     private func enqueueDownload(_ item: WebDavItem, destination: URL) {
@@ -294,23 +384,79 @@ final class FileBrowserViewModel: ObservableObject {
         startTransferQueueIfNeeded()
     }
 
+    private func enqueueFolderDownload(_ item: WebDavItem, destination: URL) {
+        transferQueue.append(TransferJob(
+            kind: .download,
+            name: item.name,
+            sourceURL: nil,
+            remotePath: item.path,
+            destinationURL: destination,
+            progress: 0,
+            state: .queued,
+            error: nil,
+            isFolder: true
+        ))
+        startTransferQueueIfNeeded()
+    }
+
     private func runDownload(_ job: TransferJob) async {
-        do {
-            guard let dest = job.destinationURL else { return }
-            try await client.download(path: job.remotePath, to: dest)
+        guard let dest = job.destinationURL else { return }
+        if job.isFolder {
+            await runFolderDownload(jobId: job.id, remotePath: job.remotePath, localDir: dest)
             NSWorkspace.shared.activateFileViewerSelecting([dest])
-        } catch {
-            markTransfer(job.id, state: .failed, progress: 1, error: error.localizedDescription)
+        } else {
+            do {
+                try await client.download(path: job.remotePath, to: dest)
+                NSWorkspace.shared.activateFileViewerSelecting([dest])
+            } catch {
+                markTransfer(job.id, state: .failed, progress: 1, error: error.localizedDescription)
+            }
         }
     }
 
-    // MARK: - Upload (NSOpenPanel)
+    private func runFolderDownload(jobId: UUID, remotePath: String, localDir: URL) async {
+        do {
+            try FileManager.default.createDirectory(at: localDir, withIntermediateDirectories: true)
+        } catch {
+            markTransfer(jobId, state: .failed, progress: 1,
+                         error: "Cannot create \(localDir.lastPathComponent): \(error.localizedDescription)")
+            return
+        }
+
+        let children: [WebDavItem]
+        do {
+            children = try await client.propfind(path: remotePath)
+        } catch WebDavError.httpStatus(403) {
+            updateTransfer(jobId, currentFile: "\((remotePath as NSString).lastPathComponent) (access denied)",
+                           fileProgress: nil)
+            return
+        } catch {
+            return
+        }
+
+        for child in children {
+            if Task.isCancelled { break }
+            let childLocal = localDir.appendingPathComponent(child.name)
+            if child.isDirectory {
+                await runFolderDownload(jobId: jobId, remotePath: child.path, localDir: childLocal)
+            } else {
+                updateTransfer(jobId, currentFile: child.name, fileProgress: nil)
+                do {
+                    try await client.download(path: child.path, to: childLocal)
+                } catch WebDavError.httpStatus(403) {
+                    // Skip access-denied files silently
+                } catch { }
+            }
+        }
+    }
+
+    // MARK: - Upload
 
     func uploadToCurrentFolder() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.begin { [weak self] result in
             guard result == .OK, let self else { return }
             self.prepareUploadFiles(panel.urls)
@@ -318,12 +464,18 @@ final class FileBrowserViewModel: ObservableObject {
     }
 
     func prepareUploadFiles(_ urls: [URL]) {
+        let files = urls.filter { !$0.hasDirectoryPath }
+        let folders = urls.filter { $0.hasDirectoryPath }
+
+        for folder in folders { enqueueFolderUpload(folder) }
+
+        guard !files.isEmpty else { return }
         let existingNames = Set(items.map { $0.name.lowercased() })
-        let conflicts = urls.map(\.lastPathComponent).filter { existingNames.contains($0.lowercased()) }
+        let conflicts = files.map(\.lastPathComponent).filter { existingNames.contains($0.lowercased()) }
         if !conflicts.isEmpty {
-            pendingUploadConflict = PendingUploadConflict(urls: urls, conflictingNames: conflicts)
+            pendingUploadConflict = PendingUploadConflict(urls: files, conflictingNames: conflicts)
         } else {
-            enqueueUploads(urls, renameConflicts: false)
+            enqueueUploads(files, renameConflicts: false)
         }
     }
 
@@ -355,25 +507,87 @@ final class FileBrowserViewModel: ObservableObject {
         startTransferQueueIfNeeded()
     }
 
+    private func enqueueFolderUpload(_ folderURL: URL) {
+        let name = folderURL.lastPathComponent
+        transferQueue.append(TransferJob(
+            kind: .upload,
+            name: name,
+            sourceURL: folderURL,
+            remotePath: pathForChild(named: name),
+            destinationURL: nil,
+            progress: 0,
+            state: .queued,
+            error: nil,
+            isFolder: true
+        ))
+        startTransferQueueIfNeeded()
+    }
+
     private func runUpload(_ job: TransferJob) async {
-        do {
-            guard let source = job.sourceURL else { return }
-            try await client.upload(path: job.remotePath, fileURL: source)
-        } catch {
-            markTransfer(job.id, state: .failed, progress: 1, error: error.localizedDescription)
+        guard let source = job.sourceURL else { return }
+        if job.isFolder {
+            await runFolderUpload(jobId: job.id, localDir: source, remotePath: job.remotePath)
+        } else {
+            do {
+                try await client.upload(path: job.remotePath, fileURL: source)
+            } catch {
+                markTransfer(job.id, state: .failed, progress: 1, error: error.localizedDescription)
+            }
         }
+    }
+
+    private func runFolderUpload(jobId: UUID, localDir: URL, remotePath: String) async {
+        do { try await client.mkcol(path: remotePath) }
+        catch WebDavError.httpStatus(405) { /* already exists — fine */ }
+        catch { /* ignore — attempt to upload children anyway */ }
+
+        guard let children = enumerateLocal(localDir) else { return }
+
+        for child in children {
+            if Task.isCancelled { break }
+            let name = child.lastPathComponent
+            let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+            let childRemote = remotePath.hasSuffix("/") ? "\(remotePath)\(encoded)" : "\(remotePath)/\(encoded)"
+            if child.hasDirectoryPath {
+                await runFolderUpload(jobId: jobId, localDir: child, remotePath: childRemote)
+            } else {
+                updateTransfer(jobId, currentFile: name, fileProgress: nil)
+                do { try await client.upload(path: childRemote, fileURL: child) }
+                catch { }
+            }
+        }
+    }
+
+    private func enumerateLocal(_ dir: URL) -> [URL]? {
+        try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
     }
 
     // MARK: - Delete
 
-    func deleteSelected() async {
+    func deleteSelected() {
         let toDelete = selectedItems
+        guard !toDelete.isEmpty else { return }
+        pendingDeleteItems = toDelete
+    }
+
+    func confirmDelete() async {
+        guard let toDelete = pendingDeleteItems else { return }
+        pendingDeleteItems = nil
         selection = []
+        clearDetailPreview()
         for item in toDelete {
             do { try await client.delete(path: item.path) }
             catch { errorMessage = "Delete failed: \(error.localizedDescription)" }
         }
         await load(path: currentPath)
+    }
+
+    func cancelDelete() {
+        pendingDeleteItems = nil
     }
 
     // MARK: - New Folder
@@ -415,6 +629,7 @@ final class FileBrowserViewModel: ObservableObject {
                 updated.state = .queued
                 updated.progress = 0
                 updated.error = nil
+                updated.currentFile = nil
             }
             return updated
         }
@@ -469,6 +684,12 @@ final class FileBrowserViewModel: ObservableObject {
         if state == .failed, let error {
             errorMessage = "\(transferQueue[index].name): \(error)"
         }
+    }
+
+    private func updateTransfer(_ id: UUID, currentFile: String?, fileProgress: String?) {
+        guard let index = transferQueue.firstIndex(where: { $0.id == id }) else { return }
+        transferQueue[index].currentFile = currentFile
+        transferQueue[index].fileProgress = fileProgress
     }
 
     private func pathForChild(named name: String) -> String {

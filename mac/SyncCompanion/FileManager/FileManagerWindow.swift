@@ -26,7 +26,8 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
         let w      = NSWindow(contentViewController: hc)
         w.title = "MiDoid - Android Files"
         w.subtitle = ip
-        w.setContentSize(NSSize(width: 860, height: 600))
+        w.setContentSize(NSSize(width: 960, height: 600))
+        w.minSize = NSSize(width: 680, height: 440)
         w.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         w.toolbarStyle = .unifiedCompact
         w.tabbingMode = .preferred

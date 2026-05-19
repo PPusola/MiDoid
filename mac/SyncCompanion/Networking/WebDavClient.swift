@@ -38,8 +38,13 @@ struct WebDavItem: Identifiable, Hashable {
         }
     }
 
+    var isPreviewablePDF: Bool {
+        guard !isDirectory else { return false }
+        return (name as NSString).pathExtension.lowercased() == "pdf"
+    }
+
     var isPreviewableMedia: Bool {
-        isPreviewableImage || isPreviewableVideo
+        isPreviewableImage || isPreviewableVideo || isPreviewablePDF
     }
 
     var displaySize: String {
@@ -49,6 +54,22 @@ struct WebDavItem: Identifiable, Hashable {
         if d < 1_048_576        { return String(format: "%.1f KB", d / 1_024) }
         if d < 1_073_741_824   { return String(format: "%.1f MB", d / 1_048_576) }
         return String(format: "%.2f GB", d / 1_073_741_824)
+    }
+
+    var displayKind: String {
+        if isDirectory { return "Folder" }
+        switch (name as NSString).pathExtension.lowercased() {
+        case "jpg", "jpeg", "png", "gif", "heic", "webp": return "Image"
+        case "mp4", "mov", "avi", "mkv", "m4v":           return "Video"
+        case "mp3", "m4a", "aac", "wav", "flac":          return "Audio"
+        case "pdf":                                         return "PDF Document"
+        case "zip", "tar", "gz", "7z", "rar":             return "Archive"
+        case "txt":                                         return "Text File"
+        case "md":                                          return "Markdown"
+        default:
+            let ext = (name as NSString).pathExtension.uppercased()
+            return ext.isEmpty ? "File" : "\(ext) File"
+        }
     }
 }
 
@@ -65,7 +86,11 @@ final class WebDavClient {
         self.port  = port
         self.token = token
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForRequest = 60
+        // The Android WebDAV server closes each connection after responding.
+        // Without this header URLSession tries to reuse the closed socket on the
+        // next request, producing -1005 "network connection was lost" errors.
+        cfg.httpAdditionalHeaders = ["Connection": "close"]
         session = URLSession(configuration: cfg)
     }
 
