@@ -1,23 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Primary: amber accent (matches cat eye color in icon) -->
-    <color name="sync_primary">#E8960C</color>
-    <color name="sync_on_primary">#2A1600</color>
-    <color name="sync_primary_container">#201608</color>
-    <color name="sync_on_primary_container">#FFD080</color>
+    <!-- Primary: slightly deeper green — less pastel, more intentional -->
+    <color name="sync_primary">#6ECFA0</color>
+    <color name="sync_on_primary">#062014</color>
+    <color name="sync_primary_container">#153325</color>
+    <color name="sync_on_primary_container">#B3EDCC</color>
 
-    <!-- Secondary: muted nordic blue -->
-    <color name="sync_secondary">#7AA3C0</color>
-    <color name="sync_secondary_container">#152840</color>
-    <color name="sync_on_secondary_container">#BDD8EF</color>
+    <!-- Secondary: warm amber accent -->
+    <color name="sync_secondary">#E8A84A</color>
+    <color name="sync_secondary_container">#332009</color>
+    <color name="sync_on_secondary_container">#FFD49A</color>
 
-    <!-- Surfaces: deep navy -->
-    <color name="sync_surface">#0D1B2A</color>
-    <color name="sync_surface_container">#122235</color>
-    <color name="sync_on_surface">#D8E8F4</color>
-    <color name="sync_on_surface_variant">#7AA3C0</color>
+    <!-- Surfaces: charcoal with enough contrast between levels -->
+    <color name="sync_surface">#0E1311</color>
+    <color name="sync_surface_container">#161C18</color>
+    <color name="sync_surface_container_high">#1C2420</color>
+    <color name="sync_on_surface">#E8F0E6</color>
+    <color name="sync_on_surface_variant">#9DB0A4</color>
 
     <!-- Outline and success -->
-    <color name="sync_outline">#1D3454</color>
-    <color name="sync_success">#4CAF7E</color>
+    <color name="sync_outline">#2A3830</color>
+    <color name="sync_success">#6ECFA0</color>
 </resources>

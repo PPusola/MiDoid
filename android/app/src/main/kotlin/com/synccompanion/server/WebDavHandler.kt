@@ -1,11 +1,13 @@
 package com.synccompanion.server
 
+import android.os.Build
 import android.util.Base64
 import android.util.Log
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
+import com.synccompanion.transfer.TransferEvents
+import java.io.InputStream
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 /**
  * Stateless request dispatcher for the embedded WebDAV server.
@@ -17,15 +19,9 @@ import java.util.TimeZone
  */
 object WebDavHandler {
 
-    // RFC 7231 HTTP-date format required by Last-Modified and similar headers
-    private val httpDate = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("GMT")
-    }
-
-    // ISO 8601 used for the WebDAV creationdate property
-    private val iso8601 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }
+    // Immutable formatters are safe to reuse across concurrent WebDAV worker threads.
+    private val httpDate: DateTimeFormatter = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneOffset.UTC)
+    private val iso8601: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
 
     /**
      * Main entry point. Authenticates the request then dispatches to the correct
@@ -42,6 +38,7 @@ object WebDavHandler {
             401, "Unauthorized",
             extraHeaders = mapOf("WWW-Authenticate" to "Basic realm=\"MiDoid\"")
         )
+        if (req.method == "GET" && req.path == "/_midoid/info") return deviceInfo()
         return when (req.method) {
             "OPTIONS"      -> options()
             "HEAD", "GET"  -> get(req, storage)
@@ -74,6 +71,16 @@ object WebDavHandler {
 
     // ── Verb handlers ─────────────────────────────────────────────────────────
 
+    /** Returns `{"name":"<model>","manufacturer":"<brand>"}` for the Mac to display as device name. */
+    private fun deviceInfo(): HttpResponse {
+        val json = """{"name":"${Build.MODEL}","manufacturer":"${Build.MANUFACTURER}"}"""
+        val body = json.toByteArray(Charsets.UTF_8)
+        return HttpResponse(200, "OK", body, mapOf(
+            "Content-Type"   to "application/json; charset=UTF-8",
+            "Content-Length" to body.size.toString()
+        ))
+    }
+
     /**
      * Handles OPTIONS. Returns the list of supported WebDAV methods and DAV compliance headers.
      * macOS Finder checks this before mounting the volume.
@@ -85,19 +92,95 @@ object WebDavHandler {
     ))
 
     /**
-     * Handles GET and HEAD. Returns the file's content and metadata headers.
-     * Returns `403 Forbidden` for directories (not downloadable as streams)
-     * and `404 Not Found` if the path does not exist. HEAD omits the response body.
+     * Handles GET and HEAD. Supports `Range: bytes=start-end` for partial content
+     * (required by AVPlayer and other streaming clients). Returns `206 Partial Content`
+     * for range requests, `200 OK` for full-file requests, `403` for directories,
+     * `404` if the path does not exist, and `416` for an unsatisfiable range.
      */
     private fun get(req: HttpRequest, storage: StorageBackend): HttpResponse {
         val entry = storage.entry(req.path) ?: return HttpResponse(404, "Not Found")
         if (entry.isDirectory) return HttpResponse(403, "Forbidden")
-        val body = if (req.method == "GET") storage.read(req.path) else ByteArray(0)
-        return HttpResponse(200, "OK", body, mapOf(
+        val totalLength = entry.length
+
+        val rangeHeader = req.header("range")
+        if (rangeHeader != null) {
+            val range = parseByteRange(rangeHeader, totalLength)
+                ?: return HttpResponse(416, "Range Not Satisfiable",
+                    extraHeaders = mapOf("Content-Range" to "bytes */$totalLength"))
+            val (start, end) = range
+            val length = end - start + 1
+            val headers = mapOf(
+                "Content-Type"   to storageMime(entry.name, entry.mimeType),
+                "Content-Length" to length.toString(),
+                "Content-Range"  to "bytes $start-$end/$totalLength",
+                "Accept-Ranges"  to "bytes",
+                "Last-Modified"  to formatHttpDate(entry.lastModified)
+            )
+            if (req.method == "HEAD") return HttpResponse(206, "Partial Content", extraHeaders = headers)
+            val stream = storage.openRead(req.path) ?: return HttpResponse(404, "Not Found")
+            stream.skip(start)
+            return HttpResponse(206, "Partial Content",
+                bodyStream = LimitedInputStream(stream, length), extraHeaders = headers)
+        }
+
+        val stream = if (req.method == "GET") storage.openRead(req.path)
+            ?: return HttpResponse(404, "Not Found") else null
+        return HttpResponse(200, "OK", bodyStream = stream, extraHeaders = mapOf(
             "Content-Type"   to storageMime(entry.name, entry.mimeType),
-            "Content-Length" to entry.length.toString(),
-            "Last-Modified"  to httpDate.format(Date(entry.lastModified))
+            "Content-Length" to totalLength.toString(),
+            "Accept-Ranges"  to "bytes",
+            "Last-Modified"  to formatHttpDate(entry.lastModified)
         ))
+    }
+
+    /**
+     * Parses a `Range: bytes=...` header value into a (start, end) pair of inclusive byte offsets.
+     * Supports all three RFC 7233 forms: `start-end`, `start-`, and `-suffixLength`.
+     * Returns `null` if the header is malformed or the range is out of bounds.
+     */
+    private fun parseByteRange(header: String, totalLength: Long): Pair<Long, Long>? {
+        if (!header.startsWith("bytes=", ignoreCase = true)) return null
+        val spec = header.substringAfter("=").trim()
+        return when {
+            spec.startsWith("-") -> {
+                val suffix = spec.drop(1).toLongOrNull() ?: return null
+                if (suffix <= 0) return null
+                maxOf(0L, totalLength - suffix) to (totalLength - 1)
+            }
+            spec.endsWith("-") -> {
+                val start = spec.dropLast(1).toLongOrNull() ?: return null
+                if (start >= totalLength) return null
+                start to (totalLength - 1)
+            }
+            else -> {
+                val parts = spec.split("-")
+                if (parts.size != 2) return null
+                val start = parts[0].toLongOrNull() ?: return null
+                val end   = parts[1].toLongOrNull() ?: return null
+                if (start > end || start >= totalLength) return null
+                start to minOf(end, totalLength - 1)
+            }
+        }
+    }
+
+    /** Wraps an [InputStream] and limits reads to [remaining] bytes. */
+    private class LimitedInputStream(
+        private val inner: InputStream,
+        private var remaining: Long
+    ) : InputStream() {
+        override fun read(): Int {
+            if (remaining <= 0) return -1
+            val b = inner.read()
+            if (b >= 0) remaining--
+            return b
+        }
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (remaining <= 0) return -1
+            val n = inner.read(b, off, minOf(len.toLong(), remaining).toInt())
+            if (n > 0) remaining -= n
+            return n
+        }
+        override fun close() = inner.close()
     }
 
     /**
@@ -143,8 +226,8 @@ object WebDavHandler {
         append("<D:propstat><D:prop>")
         val displayName = if (isRoot) rootDisplayName else xmlEsc(entry.name)
         append("<D:displayname>$displayName</D:displayname>")
-        append("<D:getlastmodified>${httpDate.format(Date(entry.lastModified))}</D:getlastmodified>")
-        append("<D:creationdate>${iso8601.format(Date(entry.lastModified))}</D:creationdate>")
+        append("<D:getlastmodified>${formatHttpDate(entry.lastModified)}</D:getlastmodified>")
+        append("<D:creationdate>${formatIsoDate(entry.lastModified)}</D:creationdate>")
         if (entry.isDirectory) {
             append("<D:resourcetype><D:collection/></D:resourcetype>")
         } else {
@@ -164,10 +247,16 @@ object WebDavHandler {
      */
     private fun put(req: HttpRequest, storage: StorageBackend): HttpResponse {
         val existed = storage.exists(req.path)
+        val filename = req.path.substringAfterLast('/').ifBlank { "file" }
+        val input = ProgressInputStream(req.inputStream, req.contentLength) { received, total, complete ->
+            TransferEvents.reportIncoming(filename, received, total, complete)
+        }
         return try {
-            if (!storage.write(req.path, req.inputStream, req.contentLength)) {
+            TransferEvents.reportIncoming(filename, 0L, req.contentLength, complete = false)
+            if (!storage.write(req.path, input, req.contentLength)) {
                 return HttpResponse(500, "Internal Server Error")
             }
+            TransferEvents.reportIncoming(filename, req.contentLength, req.contentLength, complete = true)
             HttpResponse(if (existed) 204 else 201, if (existed) "No Content" else "Created")
         } catch (e: Exception) {
             Log.e(TAG, "PUT error: ${e.message}")
@@ -252,5 +341,41 @@ object WebDavHandler {
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
 
+    private fun formatHttpDate(epochMs: Long): String = httpDate.format(Instant.ofEpochMilli(epochMs))
+
+    private fun formatIsoDate(epochMs: Long): String = iso8601.format(Instant.ofEpochMilli(epochMs))
+
+    private class ProgressInputStream(
+        private val inner: InputStream,
+        private val totalBytes: Long,
+        private val onProgress: (receivedBytes: Long, totalBytes: Long, complete: Boolean) -> Unit
+    ) : InputStream() {
+        private var receivedBytes = 0L
+        private var nextReportBytes = PROGRESS_STEP_BYTES
+
+        override fun read(): Int {
+            val value = inner.read()
+            if (value >= 0) report(1)
+            return value
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val count = inner.read(b, off, len)
+            if (count > 0) report(count)
+            return count
+        }
+
+        override fun close() = inner.close()
+
+        private fun report(count: Int) {
+            receivedBytes += count
+            if (receivedBytes >= nextReportBytes || receivedBytes >= totalBytes) {
+                onProgress(receivedBytes, totalBytes, receivedBytes >= totalBytes)
+                nextReportBytes = receivedBytes + PROGRESS_STEP_BYTES
+            }
+        }
+    }
+
     private const val TAG = "WebDavHandler"
+    private const val PROGRESS_STEP_BYTES = 512 * 1024L
 }

@@ -12,10 +12,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import com.synccompanion.R
 import com.synccompanion.databinding.ActivityMainBinding
 import com.synccompanion.security.SecurityChecks
+import com.synccompanion.service.SyncService
 import com.synccompanion.session.SessionManager
+import com.synccompanion.transfer.TransferEvents
 import kotlinx.coroutines.launch
 
 /**
@@ -64,6 +67,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnEndSession.setOnClickListener { onEndSessionTapped() }
 
         observeSession()
+        observeIncomingTransfers()
     }
 
     /**
@@ -78,6 +82,19 @@ class MainActivity : AppCompatActivity() {
             lastAllFilesAccess = currentAllFilesAccess
         }
         refreshUi()
+        ensureActiveServiceRunning()
+    }
+
+    private fun ensureActiveServiceRunning() {
+        if (!sessionManager.isSessionActive()) return
+        val sessionId = sessionManager.repository.loadSessionId() ?: return
+        val intent = Intent(this, SyncService::class.java).apply {
+            if (sessionManager.repository.isInMemorySession()) {
+                putExtra(SyncService.EXTRA_IN_MEMORY_SESSION, true)
+                putExtra(SyncService.EXTRA_SESSION_ID, sessionId)
+            }
+        }
+        startForegroundService(intent)
     }
 
     /**
@@ -93,6 +110,29 @@ class MainActivity : AppCompatActivity() {
                     showIdleState()
                 } else {
                     showConnectedState(remainingMs)
+                }
+            }
+        }
+    }
+
+    private fun observeIncomingTransfers() {
+        lifecycleScope.launch {
+            TransferEvents.incoming.collect { event ->
+                if (event.complete) {
+                    Snackbar.make(
+                        binding.root,
+                        getString(R.string.transfer_received, event.filename),
+                        Snackbar.LENGTH_SHORT
+                    ).show()
+                    refreshUi()
+                } else if (event.totalBytes > 0) {
+                    binding.statusSubtitle.text = getString(
+                        R.string.transfer_receiving_progress,
+                        event.filename,
+                        event.percent
+                    )
+                } else {
+                    binding.statusSubtitle.text = getString(R.string.transfer_receiving, event.filename)
                 }
             }
         }

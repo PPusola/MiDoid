@@ -116,6 +116,9 @@ class SessionRepository(private val context: Context) {
     /** Returns the Mac's IPv4 address stored at session creation, or `null` if absent. */
     fun loadMacIp(): String? = prefs.getString(KEY_MAC_IP, null)
 
+    /** Returns the current session id, or `null` if no session has been authorized. */
+    fun loadSessionId(): String? = prefs.getString(KEY_SESSION_ID, null)
+
     /**
      * Persists the SAF folder URI and its display name for use by [SyncService]
      * when creating the [com.synccompanion.server.DocumentTreeStorageBackend].

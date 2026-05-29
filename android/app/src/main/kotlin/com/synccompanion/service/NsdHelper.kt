@@ -3,6 +3,7 @@ package com.synccompanion.service
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.util.Log
 import com.synccompanion.server.WebDavServer
 
@@ -40,7 +41,7 @@ class NsdHelper(private val context: Context) {
         if (registrationListener != null) unregister()
 
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "AndroidSyncDevice"
+            serviceName = buildServiceName(sessionId)
             serviceType = SERVICE_TYPE
             port = WebDavServer.PORT
             // Include session_id in TXT record so Mac can verify it matches the QR payload
@@ -94,5 +95,15 @@ class NsdHelper(private val context: Context) {
 
         /** Bonjour service type used by both Android (advertiser) and the Mac companion app (discoverer). */
         const val SERVICE_TYPE = "_android-sync._tcp."
+
+        private fun buildServiceName(sessionId: String): String {
+            val model = Build.MODEL
+                .replace(Regex("[^A-Za-z0-9_-]"), "-")
+                .trim('-')
+                .take(12)
+                .ifEmpty { "Android" }
+            val suffix = sessionId.takeLast(4).ifEmpty { "sync" }
+            return "MiDoid-$model-$suffix"
+        }
     }
 }

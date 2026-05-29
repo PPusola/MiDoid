@@ -1,5 +1,6 @@
 package com.synccompanion.server
 
+import java.io.InputStream
 import java.io.OutputStream
 
 /**
@@ -12,13 +13,15 @@ import java.io.OutputStream
  * @property status       Numeric HTTP status code (e.g. 200, 404, 207).
  * @property statusText   Human-readable reason phrase (e.g. "OK", "Not Found").
  * @property body         Raw response body bytes; empty by default for header-only responses.
+ * @property bodyStream   Optional streaming body for large responses such as videos.
  * @property extraHeaders Additional headers merged into the response (e.g. Content-Type, DAV).
  */
 class HttpResponse(
     private val status: Int,
     private val statusText: String,
     private val body: ByteArray = ByteArray(0),
-    private val extraHeaders: Map<String, String> = emptyMap()
+    private val extraHeaders: Map<String, String> = emptyMap(),
+    private val bodyStream: InputStream? = null
 ) {
     /**
      * Writes the complete HTTP response — status line, headers, blank line, and body — to [out].
@@ -38,6 +41,11 @@ class HttpResponse(
         sb.append("\r\n")
         out.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
         if (body.isNotEmpty()) out.write(body)
+        bodyStream?.use { input -> input.copyTo(out, STREAM_BUFFER_SIZE) }
         out.flush()
+    }
+
+    companion object {
+        private const val STREAM_BUFFER_SIZE = 64 * 1024
     }
 }

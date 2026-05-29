@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import CoreGraphics
+import UserNotifications
 
 @main
 struct SyncCompanionApp: App {
@@ -14,7 +15,8 @@ struct SyncCompanionApp: App {
 
 // MARK: - App Delegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
@@ -37,7 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.closePopover()
         }
 
-        connectionManager.generateSession()
+        UNUserNotificationCenter.current().delegate = self
+        NotificationManager.setupCategories()
+        NotificationManager.requestPermission()
+
+        connectionManager.start()
         startIconSync()
         startWakeRecovery()
     }
@@ -69,8 +75,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         button.image = NSImage(systemSymbolName: Icons.phone, accessibilityDescription: "MiDoid")
         button.image?.isTemplate = true
+        button.contentTintColor = .systemBlue
         button.action = #selector(togglePopover)
         button.target = self
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        let dropView = DropTargetView()
+        dropView.autoresizingMask = [.width, .height]
+        dropView.frame = button.bounds
+        dropView.isConnected = { [weak self] in
+            guard let self else { return false }
+            if case .connected = self.sessionState.status { return true }
+            return false
+        }
+        dropView.onDrop = { [weak self] urls in
+            self?.connectionManager.quickSend(urls: urls)
+        }
+        dropView.onHighlight = { [weak self] highlight in
+            self?.statusItem?.button?.contentTintColor = highlight ? .systemGreen : (self?.sessionState.menuBarTint ?? .systemBlue)
+        }
+        button.addSubview(dropView)
     }
 
     @objc private func togglePopover() {
@@ -78,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let pop = popover, pop.isShown {
             closePopover()
         } else {
+            NSApp.activate(ignoringOtherApps: true)
             popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover?.contentViewController?.view.window?.makeKey()
         }
@@ -104,10 +129,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Icon tint sync
 
     private func startIconSync() {
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, let button = self.statusItem?.button else { return }
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
-                button.contentTintColor = self.sessionState.menuBarTint
+                guard let self, let button = self.statusItem?.button else { return }
+                if let transfer = self.sessionState.incomingTransfer {
+                    button.title = " \(Int(transfer.progress * 100))%"
+                    button.contentTintColor = .systemGreen
+                } else {
+                    button.title = ""
+                    button.contentTintColor = self.sessionState.menuBarTint ?? .systemBlue
+                }
             }
         }
     }
@@ -122,6 +153,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.connectionManager.reconnect()
             }
         }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    // Show notifications even when the app is in the foreground (e.g. file manager open)
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            NotificationManager.handleAction(
+                identifier: response.actionIdentifier,
+                userInfo: response.notification.request.content.userInfo
+            )
+        }
+        completionHandler()
     }
 
     // MARK: - Dock icon
@@ -208,5 +264,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         image.unlockFocus()
         return image
+    }
+}
+
+// MARK: - Drop target overlay for status bar button
+
+/// Transparent overlay placed over the status bar button.
+/// `hitTest` returns `nil` so mouse clicks pass through to the button underneath,
+/// while drag events are still received by this view via NSDraggingDestination.
+private final class DropTargetView: NSView {
+
+    var isConnected: (() -> Bool)?
+    var onDrop: (([URL]) -> Void)?
+    var onHighlight: ((Bool) -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard isConnected?() == true,
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        else { return [] }
+        onHighlight?(true)
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onHighlight?(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onHighlight?(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = sender.draggingPasteboard
+            .readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])?
+            .compactMap { $0 as? URL } ?? []
+        guard !urls.isEmpty else { return false }
+        onDrop?(urls)
+        return true
     }
 }

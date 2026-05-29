@@ -19,6 +19,8 @@
 		AA000013 /* FileBrowserViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100014 /* FileBrowserViewModel.swift */; };
 		AA000014 /* FileBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015 /* FileBrowserView.swift */; };
 		AA000015 /* FileManagerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* FileManagerWindow.swift */; };
+		AA000016 /* IncomingFileServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017 /* IncomingFileServer.swift */; };
+		AA000017 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* NotificationManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		AA100014 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
 		AA100015 /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
 		AA100016 /* FileManagerWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileManagerWindow.swift; sourceTree = "<group>"; };
+		AA100017 /* IncomingFileServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingFileServer.swift; sourceTree = "<group>"; };
+		AA100018 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		AA200001 /* MiDoid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MiDoid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -93,6 +97,8 @@
 				AA100005 /* MdnsDiscovery.swift */,
 				AA100007 /* ConnectionManager.swift */,
 				AA100013 /* WebDavClient.swift */,
+				AA100017 /* IncomingFileServer.swift */,
+				AA100018 /* NotificationManager.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -200,6 +206,8 @@
 				AA000013 /* FileBrowserViewModel.swift in Sources */,
 				AA000014 /* FileBrowserView.swift in Sources */,
 				AA000015 /* FileManagerWindow.swift in Sources */,
+				AA000016 /* IncomingFileServer.swift in Sources */,
+				AA000017 /* NotificationManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

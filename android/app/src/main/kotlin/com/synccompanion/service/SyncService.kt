@@ -11,6 +11,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.synccompanion.R
 import com.synccompanion.server.DocumentTreeStorageBackend
@@ -38,6 +39,9 @@ class SyncService : Service() {
     private lateinit var sessionManager: SessionManager
     private lateinit var nsdHelper: NsdHelper
     private var webDavServer: WebDavServer? = null
+    // Partial wake lock — keeps the CPU running while the screen is off so
+    // the WebDAV server continues accepting connections when the device is locked.
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -103,28 +107,33 @@ class SyncService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
-        try {
-            webDavServer = WebDavServer(createStorageBackend(), token).also { it.start() }
-        } catch (e: Exception) {
-            android.util.Log.e("SyncService", "WebDAV server failed to start: ${e.message}")
-            sessionManager.revokeSession()
-            stopSelf()
-            return START_NOT_STICKY
+        if (webDavServer == null) {
+            try {
+                webDavServer = WebDavServer(createStorageBackend(), token).also { it.start() }
+            } catch (e: Exception) {
+                android.util.Log.e("SyncService", "WebDAV server failed to start: ${e.message}")
+                sessionManager.revokeSession()
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
 
         val sessionId = session?.sessionId ?: intent?.getStringExtra(EXTRA_SESSION_ID) ?: ""
         nsdHelper.register(sessionId)
 
+        acquireWakeLock()
+        handler.removeCallbacks(expiryCheckRunnable)
         handler.postDelayed(expiryCheckRunnable, EXPIRY_CHECK_INTERVAL_MS)
 
         return START_STICKY
     }
 
-    /** Cancels the expiry timer, unregisters the mDNS advertisement, and shuts down the WebDAV server. */
+    /** Cancels the expiry timer, unregisters the mDNS advertisement, shuts down the WebDAV server, and releases the wake lock. */
     override fun onDestroy() {
         handler.removeCallbacks(expiryCheckRunnable)
         nsdHelper.unregister()
         webDavServer?.stop()
+        releaseWakeLock()
         super.onDestroy()
     }
 
@@ -167,12 +176,34 @@ class SyncService : Service() {
     private fun updateNotification() {
         val remaining = sessionManager.repository.remainingMs()
         val label = if (remaining > 0) {
-            "Active · ${sessionManager.formatRemaining(remaining)} remaining"
+            "Sharing files · ${sessionManager.formatRemaining(remaining)} remaining"
         } else {
-            "Active · ends on disconnect"
+            "Sharing files · tap to manage"
         }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, buildNotification(label))
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock != null) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MiDoid:SyncService").apply {
+            acquire(wakeLockTimeoutMs())
+        }
+    }
+
+    private fun wakeLockTimeoutMs(): Long {
+        val remaining = sessionManager.repository.remainingMs()
+        return if (remaining > 0L) {
+            (remaining + 30_000L).coerceAtMost(MAX_WAKE_LOCK_MS)
+        } else {
+            MAX_WAKE_LOCK_MS
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
     }
 
     /**
@@ -181,7 +212,7 @@ class SyncService : Service() {
      *
      * @param contentText  Secondary text shown below the notification title.
      */
-    private fun buildNotification(contentText: String = "Tap to view session"): android.app.Notification {
+    private fun buildNotification(contentText: String = "Sharing files · tap to manage"): android.app.Notification {
         val openIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -218,6 +249,7 @@ class SyncService : Service() {
 
         /** How often the expiry check runs, in milliseconds. */
         private const val EXPIRY_CHECK_INTERVAL_MS = 60_000L
+        private const val MAX_WAKE_LOCK_MS = 12 * 60 * 60 * 1000L
 
         /** Intent action that tells the service to revoke the session and shut down. */
         const val ACTION_STOP = "com.synccompanion.STOP"

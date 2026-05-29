@@ -57,11 +57,11 @@ interface StorageBackend {
     fun list(path: String): List<StorageEntry>
 
     /**
-     * Reads and returns the full byte contents of the file at [path].
+     * Opens a streaming reader for the file at [path].
      *
-     * @param path  Normalized absolute path of the file to read.
+     * Used by WebDAV GET so large files do not need to fit in Android memory.
      */
-    fun read(path: String): ByteArray
+    fun openRead(path: String): InputStream?
 
     /**
      * Writes [contentLength] bytes from [input] to [path], creating or overwriting the file.
@@ -208,8 +208,8 @@ class FileStorageBackend(
         } ?: emptyList()
     }
 
-    /** @see StorageBackend.read */
-    override fun read(path: String): ByteArray = resolve(path).readBytes()
+    /** @see StorageBackend.openRead */
+    override fun openRead(path: String): InputStream? = resolve(path).inputStream()
 
     /**
      * @see StorageBackend.write
@@ -343,14 +343,10 @@ class DocumentTreeStorageBackend(
         }
     }
 
-    /**
-     * @see StorageBackend.read
-     * Opens an input stream via [ContentResolver] and reads all bytes.
-     * Returns an empty array if the URI cannot be opened.
-     */
-    override fun read(path: String): ByteArray {
-        val uri = resolve(path)?.uri ?: return ByteArray(0)
-        return resolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+    /** @see StorageBackend.openRead */
+    override fun openRead(path: String): InputStream? {
+        val uri = resolve(path)?.uri ?: return null
+        return resolver.openInputStream(uri)
     }
 
     /**

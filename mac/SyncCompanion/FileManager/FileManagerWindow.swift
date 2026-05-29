@@ -6,6 +6,7 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
     static let shared = FileManagerWindow()
 
     private var window: NSWindow?
+    private var viewModel: FileBrowserViewModel?
 
     var isOpen: Bool { window != nil }
 
@@ -22,6 +23,7 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
         }
         let client = WebDavClient(ip: ip, port: port, token: token)
         let vm     = FileBrowserViewModel(client: client)
+        viewModel  = vm
         let hc     = NSHostingController(rootView: FileBrowserView(viewModel: vm))
         let w      = NSWindow(contentViewController: hc)
         w.title = "MiDoid - Android Files"
@@ -38,11 +40,16 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
         window = w
     }
 
+    func prepareUpload(urls: [URL]) {
+        viewModel?.prepareUploadFiles(urls)
+    }
+
     func close() {
         window?.close()
     }
 
     func windowWillClose(_ notification: Notification) {
         window = nil
+        viewModel = nil
     }
 }

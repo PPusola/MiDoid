@@ -131,6 +131,9 @@ final class WebDavClient {
         if urlError.code == .notConnectedToInternet, isLocalAddress(ip) {
             return WebDavError.localNetworkProhibited
         }
+        if urlError.code == .cannotConnectToHost || urlError.code == .networkConnectionLost {
+            return WebDavError.androidUnreachable
+        }
         return error
     }
 
@@ -145,6 +148,13 @@ final class WebDavClient {
     }
 
     // MARK: - WebDAV verbs
+
+    // Returns a GET request pre-loaded with auth headers.
+    // Used by the ViewModel to build an AVURLAsset for streaming video
+    // directly from the Android server without downloading the full file.
+    func videoStreamRequest(for path: String) -> URLRequest {
+        req(method: "GET", path: path)
+    }
 
     func propfind(path: String) async throws -> [WebDavItem] {
         do {
@@ -167,9 +177,12 @@ final class WebDavClient {
         }
     }
 
-    func download(path: String, to destination: URL) async throws {
+    func download(path: String, to destination: URL,
+                  onProgress: ((Int64, Int64) -> Void)? = nil) async throws {
+        let delegate = onProgress.map { DownloadProgressDelegate($0) }
         do {
-            let (tempURL, response) = try await session.download(for: req(method: "GET", path: path))
+            let (tempURL, response) = try await session.download(
+                for: req(method: "GET", path: path), delegate: delegate)
             try validate(response, allowed: [200])
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
@@ -192,15 +205,17 @@ final class WebDavClient {
         }
     }
 
-    func upload(path: String, fileURL: URL) async throws {
+    func upload(path: String, fileURL: URL,
+                onProgress: ((Int64, Int64) -> Void)? = nil) async throws {
         let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         var request = req(method: "PUT", path: path, extra: [
             "Content-Type": "application/octet-stream",
             "Content-Length": "\(size)"
         ])
         request.httpBody = nil
+        let delegate = onProgress.map { UploadProgressDelegate($0) }
         do {
-            let (_, response) = try await session.upload(for: request, fromFile: fileURL)
+            let (_, response) = try await session.upload(for: request, fromFile: fileURL, delegate: delegate)
             try validate(response, allowed: [200, 201, 204])
         } catch {
             throw mapNetworkError(error)
@@ -226,16 +241,86 @@ final class WebDavClient {
     }
 }
 
+// MARK: - Progress delegates
+
+// URLSession reports streaming progress through delegate callbacks, while the
+// async call still returns the final response/error to the caller.
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let handler: (Int64, Int64) -> Void
+    init(_ handler: @escaping (Int64, Int64) -> Void) { self.handler = handler }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        handler(totalBytesWritten, totalBytesExpectedToWrite)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {}
+}
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let handler: (Int64, Int64) -> Void
+    init(_ handler: @escaping (Int64, Int64) -> Void) { self.handler = handler }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    didSendBodyData bytesSent: Int64, totalBytesSent: Int64,
+                    totalBytesExpectedToSend: Int64) {
+        handler(totalBytesSent, totalBytesExpectedToSend)
+    }
+}
+
+// MARK: - Error type
+
 enum WebDavError: LocalizedError {
     case httpStatus(Int)
     case localNetworkProhibited
+    case androidUnreachable
 
     var errorDescription: String? {
         switch self {
         case .httpStatus(let code): return "WebDAV request failed with HTTP \(code)."
         case .localNetworkProhibited:
             return "macOS is blocking MiDoid from the Local Network. Enable MiDoid in System Settings > Privacy & Security > Local Network, then reconnect."
+        case .androidUnreachable:
+            return "Android is unreachable — make sure MiDoid is open and the screen is on."
         }
+    }
+}
+
+// MARK: - Human-readable error translation
+
+extension WebDavError {
+    static func friendly(_ error: Error) -> String {
+        if let dav = error as? WebDavError {
+            switch dav {
+            case .httpStatus(403): return "Access denied — Android blocked this location."
+            case .httpStatus(404): return "File not found on the device."
+            case .httpStatus(405): return "Operation not allowed at this path."
+            case .httpStatus(409): return "Conflict — could not create folder here."
+            case .httpStatus(507): return "Device storage is full."
+            case .httpStatus(let c): return "Server returned an error (\(c))."
+            case .localNetworkProhibited:
+                return "Local network blocked. Go to System Settings → Privacy & Security → Local Network and enable MiDoid."
+            case .androidUnreachable:
+                return "Android is unreachable — keep the MiDoid app open and the screen on."
+            }
+        }
+        if let url = error as? URLError {
+            switch url.code {
+            case .networkConnectionLost:
+                return "Connection lost — make sure both devices are on the same Wi-Fi network."
+            case .timedOut:
+                return "Transfer timed out — the file may be too large for the current connection speed."
+            case .notConnectedToInternet:
+                return "No network connection."
+            case .cannotConnectToHost:
+                return "Cannot reach device — keep the MiDoid app open and the screen on."
+            default:
+                return url.localizedDescription
+            }
+        }
+        return error.localizedDescription
     }
 }
 

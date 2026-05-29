@@ -3,6 +3,7 @@ package com.synccompanion.session
 import android.content.Context
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 
 /**
@@ -33,7 +34,7 @@ class SessionManager(context: Context) {
             emit(repository.remainingMs())
             delay(1_000)
         }
-    }
+    }.distinctUntilChanged()
 
     /**
      * Called by [com.synccompanion.service.SyncService] on start and every 60 seconds

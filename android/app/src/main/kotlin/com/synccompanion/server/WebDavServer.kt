@@ -3,15 +3,16 @@ package com.synccompanion.server
 import android.util.Log
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Embedded TCP server that accepts WebDAV connections on port [PORT].
  *
- * Each accepted connection is dispatched to a cached thread pool so that
- * multiple simultaneous transfers (e.g. macOS Finder + another client) do
- * not block each other. The server is intentionally single-lifecycle: call
+ * Each accepted connection is dispatched to a bounded thread pool so several
+ * simultaneous transfers can run without letting clients create unlimited
+ * threads. The server is intentionally single-lifecycle: call
  * [start] once and [stop] once; re-use after stopping is not supported.
  *
  * @param storage  The [StorageBackend] all WebDAV requests are forwarded to.
@@ -19,8 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class WebDavServer(private val storage: StorageBackend, private val token: String) {
 
-    /** Unbounded cached thread pool — idle threads expire after 60 s. */
-    private val pool = Executors.newCachedThreadPool()
+    /** Bounded worker pool for WebDAV requests. */
+    private val pool: ExecutorService = Executors.newFixedThreadPool(MAX_WORKER_THREADS)
 
     /** Atomic flag shared between the accept loop and [stop] to signal shutdown. */
     private val running = AtomicBoolean(false)
@@ -50,6 +51,7 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         running.set(false)
         serverSocket?.close()
         serverSocket = null
+        pool.shutdown()
         Log.i(TAG, "WebDAV server stopped")
     }
 
@@ -97,5 +99,6 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         /** TCP port the WebDAV server binds to. macOS mounts it as `http://<device-ip>:8080`. */
         const val PORT = 8080
         private const val TAG = "WebDavServer"
+        private const val MAX_WORKER_THREADS = 8
     }
 }

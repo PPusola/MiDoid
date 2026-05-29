@@ -9,6 +9,10 @@ extension Color {
     static let syncRed          = Color(nsColor: .systemRed)
     static let syncGreenMuted   = Color(nsColor: .systemGreen).opacity(0.15)
     static let syncSurface      = Color(nsColor: .windowBackgroundColor)
+    static let syncPanel        = Color(nsColor: .controlBackgroundColor)
+    static let syncPanelRaised  = Color(nsColor: .textBackgroundColor)
+    static let syncLine         = Color(nsColor: .separatorColor).opacity(0.45)
+    static let syncAccent       = Color(nsColor: .systemBlue)
     static let syncOnSurface    = Color(nsColor: .labelColor)
     static let syncSubtle       = Color(nsColor: .secondaryLabelColor)
 }
@@ -17,6 +21,7 @@ extension Color {
 
 enum Icons {
     static let phone        = "iphone.and.arrow.forward"
+    static let laptop       = "macbook.and.iphone"
     static let qr           = "qrcode.viewfinder"
     static let connected    = "checkmark.icloud.fill"
     static let error        = "exclamationmark.triangle.fill"

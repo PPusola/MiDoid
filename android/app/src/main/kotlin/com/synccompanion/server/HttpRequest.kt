@@ -1,5 +1,6 @@
 package com.synccompanion.server
 
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URLDecoder
 
@@ -86,19 +87,32 @@ data class HttpRequest(
          *               stream closes before any bytes are received.
          */
         private fun readUntilDoubleCRLF(input: InputStream): ByteArray? {
-            val buf = ArrayList<Byte>(512)
+            val buf = ByteArrayOutputStream(512)
+            var matched = 0
             while (true) {
                 val b = input.read()
-                if (b < 0) return if (buf.isEmpty()) null else buf.toByteArray()
-                buf.add(b.toByte())
-                val n = buf.size
-                if (n >= 4 &&
-                    buf[n - 4] == '\r'.code.toByte() &&
-                    buf[n - 3] == '\n'.code.toByte() &&
-                    buf[n - 2] == '\r'.code.toByte() &&
-                    buf[n - 1] == '\n'.code.toByte()
-                ) return buf.subList(0, n - 4).toByteArray()
+                if (b < 0) return if (buf.size() == 0) null else buf.toByteArray()
+                buf.write(b)
+                if (buf.size() > MAX_HEADER_BYTES) return null
+
+                matched = when {
+                    b == HEADER_TERMINATOR[matched].toInt() -> matched + 1
+                    b == HEADER_TERMINATOR[0].toInt() -> 1
+                    else -> 0
+                }
+                if (matched == HEADER_TERMINATOR.size) {
+                    val bytes = buf.toByteArray()
+                    return bytes.copyOf(bytes.size - HEADER_TERMINATOR.size)
+                }
             }
         }
+
+        private val HEADER_TERMINATOR = byteArrayOf(
+            '\r'.code.toByte(),
+            '\n'.code.toByte(),
+            '\r'.code.toByte(),
+            '\n'.code.toByte()
+        )
+        private const val MAX_HEADER_BYTES = 64 * 1024
     }
 }

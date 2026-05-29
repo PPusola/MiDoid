@@ -9,6 +9,8 @@ struct FileBrowserView: View {
     @State private var showNewFolderAlert = false
     @State private var newFolderName = ""
     @State private var isDropTarget = false
+    @State private var showHistory = false
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         ZStack {
@@ -30,6 +32,12 @@ struct FileBrowserView: View {
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTarget) { providers in
             handleDrop(providers)
         }
+        .background(
+            Button("") { viewModel.downloadSelection() }
+                .keyboardShortcut("d", modifiers: [.command])
+                .disabled(viewModel.selection.isEmpty)
+                .frame(width: 0, height: 0).opacity(0)
+        )
         .alert("New Folder", isPresented: $showNewFolderAlert) {
             TextField("Folder name", text: $newFolderName)
             Button("Create") {
@@ -45,6 +53,7 @@ struct FileBrowserView: View {
         )) {
             Button("Replace") { viewModel.uploadPendingConflict(overwrite: true) }
             Button("Keep Both") { viewModel.uploadPendingConflict(overwrite: false) }
+            Button("Skip") { viewModel.skipPendingConflict() }
             Button("Cancel", role: .cancel) { viewModel.cancelPendingConflict() }
         } message: {
             Text(conflictMessage)
@@ -88,6 +97,16 @@ struct FileBrowserView: View {
             .foregroundColor(viewModel.canGoBack ? .primary : .secondary)
             .disabled(!viewModel.canGoBack)
             .help("Back")
+            .keyboardShortcut("[", modifiers: [.command])
+
+            Button(action: viewModel.goForward) {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+            .foregroundColor(viewModel.canGoForward ? .primary : .secondary)
+            .disabled(!viewModel.canGoForward)
+            .help("Forward")
+            .keyboardShortcut("]", modifiers: [.command])
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
@@ -116,11 +135,40 @@ struct FileBrowserView: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                 TextField("Search", text: $viewModel.searchText).textFieldStyle(.plain)
+                    .focused($isSearchFocused)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .frame(width: 160)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+
+            Button(action: { isSearchFocused = true }) { Image(systemName: "magnifyingglass") }
+                .buttonStyle(.borderless).help("Search")
+                .keyboardShortcut("f", modifiers: [.command])
+                .opacity(0)
+                .frame(width: 0)
+
+            Menu {
+                ForEach(FileSortKey.allCases, id: \.self) { key in
+                    Button {
+                        viewModel.setSort(key)
+                    } label: {
+                        if viewModel.sortKey == key {
+                            Label(key.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(key.rawValue)
+                        }
+                    }
+                }
+                Divider()
+                Button(viewModel.sortAscending ? "Ascending" : "Descending") {
+                    viewModel.sortAscending.toggle()
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .menuStyle(.borderlessButton)
+            .help("Sort")
 
             Button(action: viewModel.reconnect) { Image(systemName: "wifi") }
                 .buttonStyle(.borderless).help("Reconnect")
@@ -144,6 +192,16 @@ struct FileBrowserView: View {
                 .disabled(viewModel.selection.isEmpty)
                 .help("Delete Selected")
                 .keyboardShortcut(.delete, modifiers: [])
+
+            Button(action: viewModel.openSelected) { EmptyView() }
+                .keyboardShortcut(.return, modifiers: [])
+                .opacity(0)
+                .frame(width: 0)
+
+            Button(action: viewModel.downloadSelection) { EmptyView() }
+                .keyboardShortcut("d", modifiers: [.command])
+                .opacity(0)
+                .frame(width: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -253,40 +311,192 @@ struct FileBrowserView: View {
                     Label("Transfers", systemImage: "arrow.up.arrow.down")
                         .font(.callout.weight(.semibold))
                     Spacer()
+                    if viewModel.transferQueue.contains(where: { $0.state == .complete || $0.state == .cancelled }) {
+                        Button("Clear") { viewModel.clearCompletedTransfers() }
+                            .buttonStyle(.borderless)
+                    }
                     Button("Retry Failed") { viewModel.retryFailedTransfers() }
+                        .buttonStyle(.borderless)
                         .disabled(!viewModel.transferQueue.contains { $0.state == .failed || $0.state == .cancelled })
-                    Button("Cancel") { viewModel.cancelTransfers() }
+                    if viewModel.isTransferring {
+                        Button(viewModel.isPaused ? "Resume" : "Pause") {
+                            viewModel.isPaused ? viewModel.resumeTransfers() : viewModel.pauseTransfers()
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    Button("Cancel All") { viewModel.cancelTransfers() }
+                        .buttonStyle(.borderless)
                         .disabled(!viewModel.isTransferring)
                 }
 
                 ForEach(viewModel.transferQueue.suffix(4)) { job in
-                    HStack(spacing: 8) {
-                        Image(systemName: job.kind == .upload ? "arrow.up.circle" : "arrow.down.circle")
-                            .foregroundColor(transferColor(job.state))
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text(job.name).lineLimit(1)
-                                if job.isFolder {
-                                    Image(systemName: "folder.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: job.kind == .upload ? "arrow.up.circle" : "arrow.down.circle")
+                                .foregroundColor(transferColor(job.state))
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(job.name).lineLimit(1)
+                                    if job.isFolder {
+                                        Image(systemName: "folder.fill")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
+                                Text(transferSubtitle(job))
+                                    .font(.caption)
+                                    .foregroundColor(job.state == .failed ? .red : .secondary)
+                                    .lineLimit(1)
                             }
-                            if let file = job.currentFile, job.state == .running {
-                                Text(file).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                            Spacer()
+                            if job.state == .running {
+                                ProgressView(value: job.progress).frame(width: 90)
+                            } else if job.state == .complete {
+                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                            } else if job.state == .failed {
+                                Image(systemName: "exclamationmark.circle.fill").foregroundColor(.red)
+                            } else if job.state == .cancelled {
+                                Image(systemName: "minus.circle").foregroundColor(.orange)
                             } else {
-                                Text(job.error ?? "\(job.kind.rawValue) · \(job.state.rawValue)")
-                                    .font(.caption).foregroundColor(.secondary).lineLimit(1)
+                                Image(systemName: "clock").foregroundColor(.secondary)
                             }
                         }
-                        Spacer()
-                        ProgressView(value: job.progress).frame(width: 100)
+                        // Reveal in Finder for completed downloads
+                        if job.state == .complete,
+                           job.kind == .download,
+                           let dest = job.destinationURL {
+                            Button {
+                                NSWorkspace.shared.activateFileViewerSelecting([dest])
+                            } label: {
+                                Label("Reveal in Finder", systemImage: "folder")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .padding(.leading, 26)
+                        }
                     }
                 }
             }
             .padding(12)
             .background(.regularMaterial)
         }
+        if !viewModel.transferHistory.isEmpty {
+            transferHistoryPanel
+        }
+    }
+
+    private var transferHistoryPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Collapsible header
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { showHistory.toggle() }
+            } label: {
+                HStack {
+                    Label("History", systemImage: "clock.arrow.circlepath")
+                        .font(.caption.weight(.semibold))
+                    Spacer()
+                    if showHistory {
+                        Button("Clear") { viewModel.clearTransferHistory() }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                    }
+                    Image(systemName: showHistory ? "chevron.down" : "chevron.right")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+
+            if showHistory {
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(viewModel.transferHistory) { entry in
+                            HStack(spacing: 8) {
+                                Image(systemName: historyIcon(entry.state))
+                                    .foregroundColor(transferColor(entry.state))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(entry.name).lineLimit(1)
+                                    Text(historySubtitle(entry))
+                                        .font(.caption)
+                                        .foregroundColor(entry.state == .failed ? .red : .secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                if entry.state == .complete,
+                                   entry.kind == .download,
+                                   let dest = entry.destinationURL {
+                                    Button {
+                                        NSWorkspace.shared.activateFileViewerSelecting([dest])
+                                    } label: {
+                                        Image(systemName: "folder")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Reveal in Finder")
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                }
+                .frame(maxHeight: 160)
+            }
+        }
+        .background(.thinMaterial)
+    }
+
+    // Keeps the compact transfer row readable across single-file and folder jobs.
+    private func transferSubtitle(_ job: TransferJob) -> String {
+        if let error = job.error { return error }
+        if job.state == .cancelled { return "Cancelled" }
+        if job.state == .queued { return "Queued" }
+        if job.isFolder {
+            switch job.state {
+            case .running:
+                if job.currentFile == "Scanning…" { return "Scanning…" }
+                if let total = job.totalFiles {
+                    var s = "\(job.completedFiles) of \(total) files"
+                    if let tb = job.totalBytes, tb > 0 {
+                        let pct = Int(Double(job.transferredBytes) / Double(tb) * 100)
+                        s += " · \(pct)%"
+                    }
+                    if let file = job.currentFile { s += " · \(file)" }
+                    return s
+                }
+                return job.currentFile ?? "Transferring…"
+            case .complete:
+                guard let summary = job.summary else { return "Complete" }
+                var parts = ["\(summary.completedFiles) file\(summary.completedFiles == 1 ? "" : "s")"]
+                if summary.skippedFiles > 0 { parts.append("\(summary.skippedFiles) skipped") }
+                if summary.failedFiles > 0 { parts.append("\(summary.failedFiles) failed") }
+                if summary.transferredBytes > 0 { parts.append(FileBrowserViewModel.formatBytes(summary.transferredBytes)) }
+                return parts.joined(separator: " · ")
+            default:
+                return job.state.rawValue.capitalized
+            }
+        } else {
+            switch job.state {
+            case .running:
+                if let total = job.totalBytes, total > 0 {
+                    return "\(FileBrowserViewModel.formatBytes(job.transferredBytes)) of \(FileBrowserViewModel.formatBytes(total))"
+                }
+                return "\(job.kind.rawValue.capitalized)ing…"
+            case .complete:
+                if job.transferredBytes > 0 { return "Complete · \(FileBrowserViewModel.formatBytes(job.transferredBytes))" }
+                return "Complete"
+            default:
+                return job.state.rawValue.capitalized
+            }
+        }
+    }
+
+    private func historySubtitle(_ entry: TransferHistoryEntry) -> String {
+        if let error = entry.error { return error }
+        var parts = [entry.kind.rawValue, entry.state.rawValue]
+        if entry.bytes > 0 { parts.append(FileBrowserViewModel.formatBytes(entry.bytes)) }
+        parts.append(relativeDate(entry.completedAt))
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Status bar
@@ -302,7 +512,11 @@ struct FileBrowserView: View {
             if viewModel.isTransferring {
                 ProgressView(value: viewModel.transferProgress)
                     .progressViewStyle(.linear).frame(width: 120)
-                Text(viewModel.transferStatus).font(.caption).foregroundColor(.secondary)
+                if viewModel.isPaused {
+                    Text("Paused").font(.caption).foregroundColor(.orange)
+                } else {
+                    Text(viewModel.transferStatus).font(.caption).foregroundColor(.secondary)
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -345,6 +559,16 @@ struct FileBrowserView: View {
         case .complete:  return .green
         case .failed:    return .red
         case .cancelled: return .orange
+        }
+    }
+
+    private func historyIcon(_ state: TransferState) -> String {
+        switch state {
+        case .queued:    return "clock"
+        case .running:   return "arrow.up.arrow.down.circle"
+        case .complete:  return "checkmark.circle.fill"
+        case .failed:    return "exclamationmark.circle.fill"
+        case .cancelled: return "minus.circle"
         }
     }
 
@@ -442,8 +666,8 @@ private struct DetailPane: View {
     private func updateDetailPlayer() {
         detailPlayer?.pause()
         detailPlayer = nil
-        guard case .video(let url) = viewModel.detailPreview?.kind else { return }
-        detailPlayer = AVPlayer(url: url)
+        guard case .video(let asset) = viewModel.detailPreview?.kind else { return }
+        detailPlayer = AVPlayer(playerItem: AVPlayerItem(asset: asset))
     }
 
     // MARK: Empty — current folder summary
@@ -874,8 +1098,8 @@ private struct MediaPreviewOverlay: View {
     private func setupPlayer(for preview: MediaPreview?) {
         player?.pause()
         player = nil
-        guard case .video(let url) = preview?.kind else { return }
-        let p = AVPlayer(url: url)
+        guard case .video(let asset) = preview?.kind else { return }
+        let p = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         p.play()
         player = p
     }

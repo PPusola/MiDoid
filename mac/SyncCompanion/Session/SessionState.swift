@@ -2,6 +2,33 @@ import Foundation
 import Combine
 import AppKit
 
+struct IncomingTransfer: Equatable {
+    let filename: String
+    let deviceName: String
+    let receivedBytes: Int64
+    let totalBytes: Int64
+
+    var progress: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
+    }
+
+    var detail: String {
+        if totalBytes > 0 {
+            return "\(Self.formatBytes(receivedBytes)) of \(Self.formatBytes(totalBytes))"
+        }
+        return Self.formatBytes(receivedBytes)
+    }
+
+    private static func formatBytes(_ bytes: Int64) -> String {
+        let d = Double(bytes)
+        if d < 1_024 { return "\(bytes) B" }
+        if d < 1_048_576 { return String(format: "%.1f KB", d / 1_024) }
+        if d < 1_073_741_824 { return String(format: "%.1f MB", d / 1_048_576) }
+        return String(format: "%.2f GB", d / 1_073_741_824)
+    }
+}
+
 enum SyncStatus: Equatable {
     case idle
     case displayingQR(secondsLeft: Int)
@@ -30,6 +57,8 @@ final class SessionState: ObservableObject {
 
     @Published var status: SyncStatus = .idle
     @Published var timeRemaining: String = ""
+    @Published var deviceName: String = ""
+    @Published var incomingTransfer: IncomingTransfer?
 
     private var tickTimer: Timer?
     private var qrSecondsLeft = 60
@@ -69,11 +98,32 @@ final class SessionState: ObservableObject {
         tickTimer?.invalidate()
         status = .idle
         timeRemaining = ""
+        deviceName = ""
+        incomingTransfer = nil
     }
 
     func setError(_ message: String) {
         tickTimer?.invalidate()
         status = .error(message)
+        incomingTransfer = nil
+    }
+
+    func updateIncomingTransfer(filename: String, deviceName: String, receivedBytes: Int64, totalBytes: Int64) {
+        incomingTransfer = IncomingTransfer(
+            filename: filename,
+            deviceName: deviceName,
+            receivedBytes: receivedBytes,
+            totalBytes: totalBytes
+        )
+    }
+
+    func clearIncomingTransfer(after delay: TimeInterval = 1.4) {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await MainActor.run {
+                self?.incomingTransfer = nil
+            }
+        }
     }
 
     // MARK: - Countdown
