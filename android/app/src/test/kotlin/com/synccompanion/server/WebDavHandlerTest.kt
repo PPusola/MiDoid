@@ -64,8 +64,8 @@ class WebDavHandlerTest {
     fun `OPTIONS returns 200 with Allow header`() {
         val resp = handle("OPTIONS", "/")
         assertEquals(200, resp.statusCode())
-        val body = captureBody(resp)
-        assertTrue(body.contains("Allow:") || body.contains("DAV:"))
+        val raw = captureRaw(resp)
+        assertTrue(raw.contains("Allow:") || raw.contains("DAV:"))
     }
 
     // MARK: - GET
@@ -197,11 +197,15 @@ class WebDavHandlerTest {
     // MARK: - Helpers
 
     private fun captureBody(resp: HttpResponse): String {
-        val out = ByteArrayOutputStream()
-        resp.writeTo(out)
-        val raw = out.toString(Charsets.ISO_8859_1.name())
+        val raw = captureRaw(resp)
         val separatorIdx = raw.indexOf("\r\n\r\n")
         return if (separatorIdx >= 0) raw.substring(separatorIdx + 4) else ""
+    }
+
+    private fun captureRaw(resp: HttpResponse): String {
+        val out = ByteArrayOutputStream()
+        resp.writeTo(out)
+        return out.toString(Charsets.ISO_8859_1.name())
     }
 }
 
