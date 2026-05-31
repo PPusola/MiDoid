@@ -79,16 +79,18 @@ jobs:
           body: |
             ## MiDoid ${{ github.ref_name }}
 
-            ### What's new in v0.3
+            ### What's new in ${{ github.ref_name }}
 
-            - New split-pane macOS file browser with Android files on the left and rich details on the right.
-            - Added a visible Kind column for clearer file types such as images, videos, PDFs, archives, audio, and folders.
-            - Added right-pane previews for images and PDFs, with full-screen media preview support.
-            - Added folder-level upload and download support through the existing local WebDAV session.
-            - Added multi-select download actions for moving several files or folders at once.
-            - Added safer delete confirmation before removing files or folders from Android.
-            - Improved transfer panel details for folder transfers, including current file context.
-            - Updated the Mac file manager window size and minimum size for the split-pane layout.
+            - Redesigned the Android dashboard with a more polished visual system, updated status/access cards, and supporting icons.
+            - Added Android share-sheet sending to Mac for files, photos, videos, and shared text.
+            - Added Mac receiving for Android share-sheet transfers with notifications, live progress, and automatic photo opening or Finder reveal.
+            - Added persistent pairing and more reliable reconnect behavior across app relaunches.
+            - Improved transfer progress with visible speed, ETA, richer queue details, and Android notification progress.
+            - Added Android foreground transfer protections so transfers can continue more reliably while the screen is off.
+            - Added Mac file-type organization for received files, placing photos, videos, documents, and other files into matching folders.
+            - Added WebDAV rename support from the Mac file browser, plus copy/duplicate and recursive search improvements.
+            - Improved Mac menu bar visibility, fullscreen popover behavior, and menu bar icon contrast.
+            - Hardened Android WebDAV serving with streaming responses, bounded workers/header parsing, cleaner shutdown, and safer file path handling.
 
             ### Install
 
@@ -113,6 +115,6 @@ jobs:
 
             - Signed Android release APK.
             - Signed and notarized macOS app.
-            - More accurate transfer progress for very large folder operations.
-            - Stronger conflict handling for recursive folder uploads.
-            - Local notification mirroring research and privacy design.
+            - Resumable large-file transfers.
+            - Stronger batch conflict handling for copy, rename, move, and recursive folder uploads.
+            - Android transfer history and richer in-app transfer details.
