@@ -89,6 +89,11 @@ final class SessionState: ObservableObject {
         if let expiry { startSessionCountdown(until: expiry) }
     }
 
+    func updateConnectedExpiry(_ expiry: Date?) {
+        guard case .connected(let ip, let port, let token, _) = status else { return }
+        setConnected(ip: ip, port: port, token: token, expiry: expiry)
+    }
+
     func setConnecting() {
         tickTimer?.invalidate()
         status = .connecting

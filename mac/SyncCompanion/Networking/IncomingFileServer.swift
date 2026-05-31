@@ -103,7 +103,7 @@ final class IncomingFileServer {
         let deviceName = headers["x-device-name"] ?? "Android"
         let contentLength = Int(headers["content-length"] ?? "0") ?? 0
 
-        let landingDir = IncomingFileServer.landingFolder()
+        let landingDir = IncomingFileServer.landingFolder(for: filename)
         try? FileManager.default.createDirectory(at: landingDir, withIntermediateDirectories: true)
         let destURL = IncomingFileServer.uniqueURL(in: landingDir, filename: filename)
 
@@ -176,9 +176,40 @@ final class IncomingFileServer {
 
     // MARK: - Landing folder helpers (nonisolated — called from background queue too)
 
+    nonisolated static let landingFolderDefaultsKey = "incoming.landingFolderPath"
+
     nonisolated static func landingFolder() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        if let saved = UserDefaults.standard.string(forKey: landingFolderDefaultsKey) {
+            let url = URL(fileURLWithPath: saved, isDirectory: true)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Downloads/MiDoid", isDirectory: true)
+    }
+
+    static func setLandingFolder(_ url: URL) {
+        UserDefaults.standard.set(url.path, forKey: landingFolderDefaultsKey)
+    }
+
+    nonisolated static func landingFolder(for filename: String) -> URL {
+        landingFolder().appendingPathComponent(folderName(for: filename), isDirectory: true)
+    }
+
+    nonisolated static func folderName(for filename: String) -> String {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "avif", "bmp", "gif", "heic", "heif", "jpeg", "jpg", "png", "raw", "tif", "tiff", "webp":
+            return "Photos"
+        case "3gp", "avi", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "webm":
+            return "Videos"
+        case "aac", "aiff", "alac", "flac", "m4a", "mp3", "ogg", "opus", "wav":
+            return "Audio"
+        case "csv", "doc", "docx", "key", "md", "numbers", "pages", "pdf", "ppt", "pptx", "rtf", "txt", "xls", "xlsx":
+            return "Documents"
+        case "7z", "bz2", "dmg", "gz", "pkg", "rar", "tar", "tgz", "zip":
+            return "Archives"
+        default:
+            return "Other"
+        }
     }
 
     nonisolated static func uniqueURL(in folder: URL, filename: String) -> URL {

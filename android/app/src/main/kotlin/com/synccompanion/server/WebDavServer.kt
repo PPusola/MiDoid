@@ -17,8 +17,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * @param storage  The [StorageBackend] all WebDAV requests are forwarded to.
  * @param token    Session token forwarded to [WebDavHandler] for per-request authentication.
+ * @param infoProvider Additional session metadata exposed from `/_midoid/info`.
  */
-class WebDavServer(private val storage: StorageBackend, private val token: String) {
+class WebDavServer(
+    private val storage: StorageBackend,
+    private val token: String,
+    private val infoProvider: () -> Map<String, Any?> = { emptyMap() }
+) {
 
     /** Bounded worker pool for WebDAV requests. */
     private val pool: ExecutorService = Executors.newFixedThreadPool(MAX_WORKER_THREADS)
@@ -86,7 +91,7 @@ class WebDavServer(private val storage: StorageBackend, private val token: Strin
         try {
             socket.soTimeout = 30_000
             val req = HttpRequest.parse(socket.getInputStream()) ?: return
-            val resp = WebDavHandler.handle(req, storage, token)
+            val resp = WebDavHandler.handle(req, storage, token, infoProvider)
             resp.writeTo(socket.getOutputStream())
         } catch (e: Exception) {
             Log.w(TAG, "Connection error: ${e.message}")

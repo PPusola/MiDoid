@@ -92,6 +92,32 @@
     <string name="transfer_receiving">Receiving %1$s from Mac</string>
     <string name="transfer_receiving_progress">Receiving %1$s from Mac · %2$d%%</string>
     <string name="transfer_received">Received %1$s from Mac</string>
+    <string name="transfer_card_title">Transfer</string>
+    <string name="transfer_card_done">Received</string>
+    <string name="transfer_card_recent">Recent: %1$s</string>
+    <string name="transfer_speed_eta">%1$s/s · %2$s left</string>
+    <string name="open_folder">Open Folder</string>
+    <string name="battery_opt_title">Allow Background Transfers?</string>
+    <string name="battery_opt_message">MiDoid can keep transfers running after the screen turns off if Android does not put it to sleep. Allow MiDoid to ignore battery optimization for active sync sessions.</string>
+    <string name="battery_opt_allow">Allow</string>
+
+    <!-- Battery settings card -->
+    <string name="battery_settings_title">Background Transfers</string>
+    <string name="battery_status_optimized">Battery optimization is on — transfers may stop when the screen turns off.</string>
+    <string name="battery_status_ignored">Battery optimization is off — transfers run in the background.</string>
+    <string name="btn_disable_battery_opt">Disable Battery Optimization</string>
+    <string name="btn_oem_battery_guide">OEM Battery Manager Help</string>
+
+    <!-- OEM battery guidance -->
+    <string name="oem_guide_title">Battery Manager — %1$s</string>
+    <string name="oem_guide_title_generic">OEM Battery Manager</string>
+    <string name="oem_guide_xiaomi">On Xiaomi / Redmi / POCO (MIUI · HyperOS):\n\n1. Settings → Apps → Manage apps → MiDoid → Battery Saver → No restrictions\n2. Settings → Apps → Manage apps → MiDoid → Autostart → On\n3. Security app → Battery → Power-intensive prompt → MiDoid → Off</string>
+    <string name="oem_guide_samsung">On Samsung (One UI):\n\n1. Settings → Battery → Background usage limits → remove MiDoid from sleeping or deep sleeping lists\n2. Settings → Apps → MiDoid → Battery → Unrestricted</string>
+    <string name="oem_guide_huawei">On Huawei / Honor (EMUI · HarmonyOS):\n\n1. Settings → Apps → Apps → MiDoid → Battery → Disable power-intensive prompt\n2. Phone Manager → App Launch → MiDoid → Manage manually → Auto-launch, Secondary launch, Run in background — all On</string>
+    <string name="oem_guide_oppo_realme">On OPPO / Realme (ColorOS):\n\n1. Settings → Battery → Battery Optimization → MiDoid → Don\'t optimize\n2. Security Center → Privacy Permissions → MiDoid → Auto Launch → Allow\n3. Settings → Apps → MiDoid → Battery → Allow background activity</string>
+    <string name="oem_guide_oneplus">On OnePlus (OxygenOS):\n\n1. Settings → Battery → Battery Optimization → MiDoid → Don\'t optimize\n2. Settings → Apps → MiDoid → Battery → Unrestricted</string>
+    <string name="oem_guide_vivo">On Vivo (FuntouchOS · OriginOS):\n\n1. iManager → App Manager → MiDoid → Enable Background app refresh\n2. Settings → Battery → High Background Power Consumption → MiDoid → Allow</string>
+    <string name="oem_guide_generic">Your Android manufacturer may have a custom battery manager that can stop background apps.\n\nLook for "Background app management", "Auto launch", or "App battery usage" in your Settings or Battery Manager app, then set MiDoid to Unrestricted or No restrictions.</string>
     <plurals name="share_sent">
         <item quantity="one">Sent %d file to Mac</item>
         <item quantity="other">Sent %d files to Mac</item>

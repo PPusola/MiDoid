@@ -1,11 +1,15 @@
 package com.synccompanion.ui
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -18,8 +22,10 @@ import com.synccompanion.databinding.ActivityMainBinding
 import com.synccompanion.security.SecurityChecks
 import com.synccompanion.service.SyncService
 import com.synccompanion.session.SessionManager
+import com.synccompanion.transfer.TransferEvent
 import com.synccompanion.transfer.TransferEvents
 import kotlinx.coroutines.launch
+import java.util.ArrayDeque
 
 /**
  * Main dashboard screen. Displays the current session status alongside four stat tiles:
@@ -35,6 +41,10 @@ class MainActivity : AppCompatActivity() {
 
     /** Tracks the MANAGE_EXTERNAL_STORAGE state at last resume to detect background changes. */
     private var lastAllFilesAccess = false
+    private val recentReceived = ArrayDeque<String>()
+    private var transferStartMs = 0L
+    private var lastTransferFilename: String? = null
+    private var askedBatteryOptimizationThisRun = false
 
     /**
      * Runtime permission launcher for POST_NOTIFICATIONS (required on Android 13+).
@@ -65,6 +75,7 @@ class MainActivity : AppCompatActivity() {
         binding.fabScan.setOnClickListener { onScanTapped() }
         binding.btnOpenSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnEndSession.setOnClickListener { onEndSessionTapped() }
+        binding.btnOpenTransferFolder.setOnClickListener { openSharedFolder() }
 
         observeSession()
         observeIncomingTransfers()
@@ -83,6 +94,7 @@ class MainActivity : AppCompatActivity() {
         }
         refreshUi()
         ensureActiveServiceRunning()
+        maybePromptBatteryOptimization()
     }
 
     private fun ensureActiveServiceRunning() {
@@ -95,6 +107,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
         startForegroundService(intent)
+    }
+
+    private fun maybePromptBatteryOptimization() {
+        if (askedBatteryOptimizationThisRun || !sessionManager.isSessionActive()) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        askedBatteryOptimizationThisRun = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.battery_opt_title)
+            .setMessage(R.string.battery_opt_message)
+            .setPositiveButton(R.string.battery_opt_allow) { _, _ ->
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                try {
+                    startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     /**
@@ -119,23 +153,106 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             TransferEvents.incoming.collect { event ->
                 if (event.complete) {
+                    recordReceivedFile(event.filename)
+                    showCompletedTransfer(event)
                     Snackbar.make(
                         binding.root,
                         getString(R.string.transfer_received, event.filename),
                         Snackbar.LENGTH_SHORT
                     ).show()
                     refreshUi()
-                } else if (event.totalBytes > 0) {
-                    binding.statusSubtitle.text = getString(
-                        R.string.transfer_receiving_progress,
-                        event.filename,
-                        event.percent
-                    )
                 } else {
-                    binding.statusSubtitle.text = getString(R.string.transfer_receiving, event.filename)
+                    showActiveTransfer(event)
+                    if (event.totalBytes > 0) {
+                        binding.statusSubtitle.text = getString(
+                            R.string.transfer_receiving_progress,
+                            event.filename,
+                            event.percent
+                        )
+                    } else {
+                        binding.statusSubtitle.text = getString(R.string.transfer_receiving, event.filename)
+                    }
                 }
             }
         }
+    }
+
+    private fun showActiveTransfer(event: TransferEvent) {
+        if (lastTransferFilename != event.filename || transferStartMs == 0L) {
+            lastTransferFilename = event.filename
+            transferStartMs = System.currentTimeMillis()
+        }
+        binding.transferCard.visibility = View.VISIBLE
+        binding.transferTitle.setText(R.string.transfer_card_title)
+        binding.transferFilename.text = event.filename
+        if (event.totalBytes > 0L) {
+            binding.transferProgress.isIndeterminate = false
+            binding.transferProgress.progress = event.percent
+            binding.transferDetail.text = buildTransferDetail(event)
+        } else {
+            binding.transferProgress.isIndeterminate = true
+            binding.transferDetail.text = formatBytes(event.receivedBytes)
+        }
+        updateRecentTransfers()
+    }
+
+    private fun showCompletedTransfer(event: TransferEvent) {
+        lastTransferFilename = null
+        transferStartMs = 0L
+        binding.transferCard.visibility = View.VISIBLE
+        binding.transferTitle.setText(R.string.transfer_card_done)
+        binding.transferFilename.text = event.filename
+        binding.transferProgress.isIndeterminate = false
+        binding.transferProgress.progress = 100
+        binding.transferDetail.text = if (event.totalBytes > 0L) {
+            "${formatBytes(event.totalBytes)} · Complete"
+        } else {
+            "Complete"
+        }
+        updateRecentTransfers()
+    }
+
+    private fun buildTransferDetail(event: TransferEvent): String {
+        val base = "${formatBytes(event.receivedBytes)} of ${formatBytes(event.totalBytes)}"
+        val elapsedSeconds = ((System.currentTimeMillis() - transferStartMs).coerceAtLeast(250L)).toDouble() / 1000.0
+        val speed = event.receivedBytes / elapsedSeconds
+        if (speed <= 0.0 || !speed.isFinite()) return base
+        val remainingSeconds = ((event.totalBytes - event.receivedBytes).coerceAtLeast(0L) / speed)
+        return "$base · ${formatBytes(speed.toLong())}/s · ${formatDuration(remainingSeconds)} left"
+    }
+
+    private fun recordReceivedFile(filename: String) {
+        recentReceived.remove(filename)
+        recentReceived.addFirst(filename)
+        while (recentReceived.size > 3) recentReceived.removeLast()
+    }
+
+    private fun updateRecentTransfers() {
+        if (recentReceived.isEmpty()) {
+            binding.recentTransfers.visibility = View.GONE
+        } else {
+            binding.recentTransfers.visibility = View.VISIBLE
+            binding.recentTransfers.text = getString(
+                R.string.transfer_card_recent,
+                recentReceived.joinToString(", ")
+            )
+        }
+    }
+
+    private fun openSharedFolder() {
+        val selected = sessionManager.repository.loadSharedFolderUri()
+        if (selected != null) {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(selected, "vnd.android.document/directory")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                startActivity(intent)
+                return
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     /** Synchronizes all UI elements with the current session state on demand (e.g. after onResume). */
@@ -196,6 +313,7 @@ class MainActivity : AppCompatActivity() {
         binding.statusSubtitle.setText(R.string.status_idle_subtitle)
         binding.countdownChip.visibility = View.GONE
         binding.btnEndSession.visibility = View.GONE
+        if (recentReceived.isEmpty()) binding.transferCard.visibility = View.GONE
         binding.fabScan.extend()
     }
 
@@ -272,4 +390,23 @@ class MainActivity : AppCompatActivity() {
      */
     private fun hasAllFilesAccess(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+
+    private fun formatBytes(bytes: Long): String {
+        val value = bytes.toDouble()
+        return when {
+            value < 1_024 -> "$bytes B"
+            value < 1_048_576 -> "%.1f KB".format(value / 1_024)
+            value < 1_073_741_824 -> "%.1f MB".format(value / 1_048_576)
+            else -> "%.2f GB".format(value / 1_073_741_824)
+        }
+    }
+
+    private fun formatDuration(seconds: Double): String {
+        val total = seconds.toInt().coerceAtLeast(1)
+        if (total < 60) return "${total}s"
+        val minutes = total / 60
+        val remainder = total % 60
+        if (minutes < 60) return if (remainder == 0) "${minutes}m" else "${minutes}m ${remainder}s"
+        return "${minutes / 60}h ${minutes % 60}m"
+    }
 }

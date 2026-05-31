@@ -166,7 +166,7 @@ struct MenuBarView: View {
                 VStack(spacing: 4) {
                     Text("Reconnecting")
                         .font(.headline)
-                    Text("Keep both devices on the same Wi-Fi network.")
+                    Text(manager.rememberedEndpointLabel.map { "Trying \($0). Keep both devices on the same Wi-Fi network." } ?? "Keep both devices on the same Wi-Fi network.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -219,6 +219,20 @@ struct MenuBarView: View {
                     HStack(spacing: 8) {
                         quickInfo(icon: "lock.shield", title: "Private", value: "LAN only")
                         quickInfo(icon: "arrow.up.doc", title: "Send", value: "Drag to icon")
+                    }
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "tray.and.arrow.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(IncomingFileServer.landingFolder().lastPathComponent)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        Button("Change") { chooseLandingFolder() }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                     }
 
                     Button {
@@ -307,6 +321,15 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Reconnect")
+
+                Button {
+                    manager.forgetRememberedDevice()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(.secondary)
+                .help("Forget This Device")
             } else if case .displayingQR = state.status {
                 Button {
                     manager.generateSession()
@@ -325,6 +348,18 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(!manager.hasRememberedSession)
+
+                if manager.hasRememberedSession {
+                    Button {
+                        manager.forgetRememberedDevice()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.secondary)
+                    .help("Forget Saved Device")
+                }
             }
 
             Spacer()
@@ -354,6 +389,19 @@ struct MenuBarView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(Color.syncLine, lineWidth: 1)
             )
+    }
+
+    private func chooseLandingFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        panel.message = "Choose where received files are saved"
+        panel.directoryURL = IncomingFileServer.landingFolder()
+        if panel.runModal() == .OK, let url = panel.url {
+            IncomingFileServer.setLandingFolder(url)
+        }
     }
 
     private func quickInfo(icon: String, title: String, value: String) -> some View {

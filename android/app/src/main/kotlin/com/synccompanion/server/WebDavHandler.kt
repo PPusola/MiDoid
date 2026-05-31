@@ -33,12 +33,17 @@ object WebDavHandler {
      * @param token    Expected session token; compared against the Basic-auth password field.
      * @return         An [HttpResponse] ready to be written to the socket.
      */
-    fun handle(req: HttpRequest, storage: StorageBackend, token: String): HttpResponse {
+    fun handle(
+        req: HttpRequest,
+        storage: StorageBackend,
+        token: String,
+        infoProvider: () -> Map<String, Any?> = { emptyMap() }
+    ): HttpResponse {
         if (!checkAuth(req, token)) return HttpResponse(
             401, "Unauthorized",
             extraHeaders = mapOf("WWW-Authenticate" to "Basic realm=\"MiDoid\"")
         )
-        if (req.method == "GET" && req.path == "/_midoid/info") return deviceInfo()
+        if (req.method == "GET" && req.path == "/_midoid/info") return deviceInfo(infoProvider())
         return when (req.method) {
             "OPTIONS"      -> options()
             "HEAD", "GET"  -> get(req, storage)
@@ -72,8 +77,20 @@ object WebDavHandler {
     // ── Verb handlers ─────────────────────────────────────────────────────────
 
     /** Returns `{"name":"<model>","manufacturer":"<brand>"}` for the Mac to display as device name. */
-    private fun deviceInfo(): HttpResponse {
-        val json = """{"name":"${Build.MODEL}","manufacturer":"${Build.MANUFACTURER}"}"""
+    private fun deviceInfo(info: Map<String, Any?>): HttpResponse {
+        val fields = linkedMapOf<String, Any?>(
+            "name" to Build.MODEL,
+            "manufacturer" to Build.MANUFACTURER
+        )
+        fields.putAll(info)
+        val json = fields.entries.joinToString(prefix = "{", postfix = "}") { (key, value) ->
+            val encodedKey = jsonString(key)
+            when (value) {
+                is Number, is Boolean -> "$encodedKey:$value"
+                null -> "$encodedKey:null"
+                else -> "$encodedKey:${jsonString(value.toString())}"
+            }
+        }
         val body = json.toByteArray(Charsets.UTF_8)
         return HttpResponse(200, "OK", body, mapOf(
             "Content-Type"   to "application/json; charset=UTF-8",
@@ -340,6 +357,21 @@ object WebDavHandler {
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
+
+    private fun jsonString(s: String): String = buildString {
+        append('"')
+        for (ch in s) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
+        append('"')
+    }
 
     private fun formatHttpDate(epochMs: Long): String = httpDate.format(Instant.ofEpochMilli(epochMs))
 

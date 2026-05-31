@@ -1,10 +1,12 @@
 package com.synccompanion.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -69,6 +71,8 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnSettingsAllFiles.setOnClickListener { openAllFilesSettings() }
         binding.btnSettingsAppStorage.setOnClickListener { clearSharedFolder() }
         binding.btnSettingsPermissionInfo.setOnClickListener { showPermissionInfo() }
+        binding.btnDisableBatteryOpt.setOnClickListener { openBatteryOptSettings() }
+        binding.btnOemBatteryGuide.setOnClickListener { showOemBatteryGuide() }
     }
 
     /**
@@ -79,6 +83,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshUi()
+        refreshBatteryUi()
     }
 
     /**
@@ -92,6 +97,55 @@ class SettingsActivity : AppCompatActivity() {
             hasAllFilesAccess() -> getString(R.string.storage_mode_all_files)
             else -> getString(R.string.storage_mode_app_storage)
         }
+    }
+
+    private fun refreshBatteryUi() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val ignoring = pm.isIgnoringBatteryOptimizations(packageName)
+        binding.batteryOptStatus.text = getString(
+            if (ignoring) R.string.battery_status_ignored else R.string.battery_status_optimized
+        )
+        binding.btnDisableBatteryOpt.isEnabled = !ignoring
+    }
+
+    private fun openBatteryOptSettings() {
+        val intent = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        runCatching { startActivity(intent) }.getOrElse {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+    }
+
+    private fun showOemBatteryGuide() {
+        val brand = Build.BRAND.lowercase()
+        val mfr = Build.MANUFACTURER.lowercase()
+        val (title, message) = when {
+            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco")
+                || mfr.contains("xiaomi") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_xiaomi)
+            brand.contains("samsung") || mfr.contains("samsung") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_samsung)
+            brand.contains("huawei") || brand.contains("honor")
+                || mfr.contains("huawei") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_huawei)
+            brand.contains("oppo") || mfr.contains("oppo") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_oppo_realme)
+            brand.contains("realme") || mfr.contains("realme") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_oppo_realme)
+            brand.contains("oneplus") || mfr.contains("oneplus") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_oneplus)
+            brand.contains("vivo") || mfr.contains("vivo") ->
+                getString(R.string.oem_guide_title, Build.MANUFACTURER) to getString(R.string.oem_guide_vivo)
+            else ->
+                getString(R.string.oem_guide_title_generic) to getString(R.string.oem_guide_generic)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /**

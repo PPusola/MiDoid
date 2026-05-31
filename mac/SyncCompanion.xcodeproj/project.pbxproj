@@ -21,7 +21,22 @@
 		AA000015 /* FileManagerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* FileManagerWindow.swift */; };
 		AA000016 /* IncomingFileServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017 /* IncomingFileServer.swift */; };
 		AA000017 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* NotificationManager.swift */; };
+		AB000001 /* FileBrowserViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB100001 /* FileBrowserViewModelTests.swift */; };
+		AB000002 /* SessionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB100002 /* SessionStateTests.swift */; };
+		AB000003 /* IncomingFileServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB100003 /* IncomingFileServerTests.swift */; };
+		AB000004 /* WebDavErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB100004 /* WebDavErrorTests.swift */; };
+		AB000005 /* KeychainStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB100005 /* KeychainStoreTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AB900002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA700001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA400001;
+			remoteInfo = SyncCompanion;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		AA100001 /* SyncCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCompanionApp.swift; sourceTree = "<group>"; };
@@ -40,10 +55,23 @@
 		AA100017 /* IncomingFileServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingFileServer.swift; sourceTree = "<group>"; };
 		AA100018 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		AA200001 /* MiDoid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MiDoid.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB100001 /* FileBrowserViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModelTests.swift; sourceTree = "<group>"; };
+		AB100002 /* SessionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStateTests.swift; sourceTree = "<group>"; };
+		AB100003 /* IncomingFileServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingFileServerTests.swift; sourceTree = "<group>"; };
+		AB100004 /* WebDavErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDavErrorTests.swift; sourceTree = "<group>"; };
+		AB100005 /* KeychainStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStoreTests.swift; sourceTree = "<group>"; };
+		AB200001 /* SyncCompanionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SyncCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA500003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB500002 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -57,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				AA300001 /* SyncCompanion */,
+				AB300001 /* SyncCompanionTests */,
 				AA300009 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -127,8 +156,21 @@
 			isa = PBXGroup;
 			children = (
 				AA200001 /* MiDoid.app */,
+				AB200001 /* SyncCompanionTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AB300001 /* SyncCompanionTests */ = {
+			isa = PBXGroup;
+			children = (
+				AB100001 /* FileBrowserViewModelTests.swift */,
+				AB100002 /* SessionStateTests.swift */,
+				AB100003 /* IncomingFileServerTests.swift */,
+				AB100004 /* WebDavErrorTests.swift */,
+				AB100005 /* KeychainStoreTests.swift */,
+			);
+			path = SyncCompanionTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -150,6 +192,23 @@
 			productName = MiDoid;
 			productReference = AA200001 /* MiDoid.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AB400001 /* SyncCompanionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB600001 /* Build configuration list for PBXNativeTarget "SyncCompanionTests" */;
+			buildPhases = (
+				AB500001 /* Sources */,
+				AB500002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AB900001 /* PBXTargetDependency */,
+			);
+			name = SyncCompanionTests;
+			productName = SyncCompanionTests;
+			productReference = AB200001 /* SyncCompanionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -175,6 +234,7 @@
 			projectRoot = "";
 			targets = (
 				AA400001 /* SyncCompanion */,
+				AB400001 /* SyncCompanionTests */,
 			);
 		};
 /* End PBXProject section */
@@ -211,7 +271,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AB500001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB000001 /* FileBrowserViewModelTests.swift in Sources */,
+				AB000002 /* SessionStateTests.swift in Sources */,
+				AB000003 /* IncomingFileServerTests.swift in Sources */,
+				AB000004 /* WebDavErrorTests.swift in Sources */,
+				AB000005 /* KeychainStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AB900001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA400001 /* SyncCompanion */;
+			targetProxy = AB900002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA800001 /* Debug */ = {
@@ -326,6 +406,32 @@
 			};
 			name = Release;
 		};
+		AB800001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.synccompanion.mac.tests";
+				PRODUCT_NAME = SyncCompanionTests;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MiDoid.app/Contents/MacOS/MiDoid";
+			};
+			name = Debug;
+		};
+		AB800002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.synccompanion.mac.tests";
+				PRODUCT_NAME = SyncCompanionTests;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MiDoid.app/Contents/MacOS/MiDoid";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -343,6 +449,15 @@
 			buildConfigurations = (
 				AA800001 /* Debug */,
 				AA800002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB600001 /* Build configuration list for PBXNativeTarget "SyncCompanionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB800001 /* Debug */,
+				AB800002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

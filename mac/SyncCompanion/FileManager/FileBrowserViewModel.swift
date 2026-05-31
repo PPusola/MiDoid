@@ -35,6 +35,11 @@ struct TransferSummary: Equatable {
     let destinationURL: URL?
 }
 
+struct TransferSample: Equatable {
+    let date: Date
+    let bytes: Int64
+}
+
 // MARK: - Transfer job
 
 struct TransferJob: Identifiable, Equatable {
@@ -47,6 +52,7 @@ struct TransferJob: Identifiable, Equatable {
     var progress: Double
     var state: TransferState
     var error: String?
+    var startTime: Date? = nil
     // Folder flag
     var isFolder: Bool = false
     // Current file name (shown while running)
@@ -54,6 +60,8 @@ struct TransferJob: Identifiable, Equatable {
     // Byte-level progress (single files)
     var totalBytes: Int64? = nil
     var transferredBytes: Int64 = 0
+    var recentSamples: [TransferSample] = []
+    var smoothedBytesPerSecond: Double? = nil
     // File-count progress (folder jobs)
     var totalFiles: Int? = nil
     var completedFiles: Int = 0
@@ -76,12 +84,31 @@ struct TransferHistoryEntry: Identifiable, Equatable {
     let error: String?
 }
 
+struct BatchSummaryItem: Equatable {
+    let category: String
+    let count: Int
+    let bytes: Int64
+}
+
 // MARK: - Upload conflict
 
 struct PendingUploadConflict: Identifiable {
     let id = UUID()
     let urls: [URL]
     let conflictingNames: [String]
+}
+
+enum RenameConflictAction {
+    case replace
+    case keepBoth
+    case cancel
+}
+
+struct PendingRenameConflict: Identifiable {
+    let id = UUID()
+    let item: WebDavItem
+    let requestedName: String
+    let existingItem: WebDavItem
 }
 
 // MARK: - Media preview
@@ -113,7 +140,10 @@ final class FileBrowserViewModel: ObservableObject {
     @Published var transferProgress: Double = 0
     @Published var transferQueue: [TransferJob] = []
     @Published var searchText = ""
+    @Published var recursiveSearchEnabled = false
+    @Published var isSearchingRecursively = false
     @Published var pendingUploadConflict: PendingUploadConflict?
+    @Published var pendingRenameConflict: PendingRenameConflict?
     @Published var mediaPreview: MediaPreview?
     @Published var isLoadingPreview = false
     @Published var previewIndex: Int? = nil
@@ -127,6 +157,13 @@ final class FileBrowserViewModel: ObservableObject {
     @Published var sortAscending: Bool = UserDefaults.standard.object(forKey: "fileBrowser.sortAscending") as? Bool ?? true
     @Published var transferHistory: [TransferHistoryEntry] = []
     @Published var isPaused = false
+    @Published var lastLatencyMs: Int?
+    @Published private(set) var recursiveSearchResults: [WebDavItem] = []
+    @Published var batchSummary: [BatchSummaryItem]? = nil
+
+    static var pendingRetries: [TransferJob] = []
+
+    private static let folderConcurrencyLimit = 3
 
     let client: WebDavClient
     private var backStack: [String] = []
@@ -135,6 +172,7 @@ final class FileBrowserViewModel: ObservableObject {
     private var transferActivity: NSObjectProtocol?
     private var previewCache: [String: MediaPreview] = [:]
     private var prefetchTasks: [String: Task<Void, Never>] = [:]
+    private var recursiveSearchTask: Task<Void, Never>?
 
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
@@ -157,11 +195,17 @@ final class FileBrowserViewModel: ObservableObject {
         return result
     }
 
-    var selectedItems: [WebDavItem] { items.filter { selection.contains($0.id) } }
+    var visibleSourceItems: [WebDavItem] { isShowingRecursiveResults ? recursiveSearchResults : items }
+    var selectedItems: [WebDavItem] { visibleSourceItems.filter { selection.contains($0.id) } }
     var filteredItems: [WebDavItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let searched = query.isEmpty ? items : items.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let source = visibleSourceItems
+        let searched = query.isEmpty ? items : source.filter { $0.name.localizedCaseInsensitiveContains(query) }
         return searched.sorted(by: sortItems)
+    }
+
+    var isShowingRecursiveResults: Bool {
+        recursiveSearchEnabled && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var emptyStateTitle: String {
@@ -196,6 +240,10 @@ final class FileBrowserViewModel: ObservableObject {
 
     init(client: WebDavClient) {
         self.client = client
+        if !Self.pendingRetries.isEmpty {
+            transferQueue = Self.pendingRetries
+            Self.pendingRetries = []
+        }
         Task { await load(path: "/") }
     }
 
@@ -205,13 +253,18 @@ final class FileBrowserViewModel: ObservableObject {
         if path != currentPath {
             closePreview()
             clearDetailPreview()
+            recursiveSearchTask?.cancel()
+            recursiveSearchResults = []
         }
         isLoading = true
         errorMessage = nil
+        let started = Date()
         do {
             let fetched = try await client.propfind(path: path)
             items = fetched
             currentPath = path
+            lastLatencyMs = Int(Date().timeIntervalSince(started) * 1000)
+            updateRecursiveSearch()
         } catch {
             errorMessage = WebDavError.friendly(error)
         }
@@ -264,6 +317,55 @@ final class FileBrowserViewModel: ObservableObject {
         }
         UserDefaults.standard.set(sortKey.rawValue, forKey: "fileBrowser.sortKey")
         UserDefaults.standard.set(sortAscending, forKey: "fileBrowser.sortAscending")
+    }
+
+    func setRecursiveSearchEnabled(_ enabled: Bool) {
+        recursiveSearchEnabled = enabled
+        updateRecursiveSearch()
+    }
+
+    func searchTextDidChange() {
+        updateRecursiveSearch()
+    }
+
+    private func updateRecursiveSearch() {
+        recursiveSearchTask?.cancel()
+        recursiveSearchResults = []
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard recursiveSearchEnabled, !query.isEmpty else {
+            isSearchingRecursively = false
+            return
+        }
+        let root = currentPath
+        isSearchingRecursively = true
+        recursiveSearchTask = Task { [weak self] in
+            guard let self else { return }
+            let results = await self.collectSearchResults(path: root, query: query)
+            guard !Task.isCancelled else { return }
+            self.recursiveSearchResults = results
+            self.isSearchingRecursively = false
+        }
+    }
+
+    private func collectSearchResults(path: String, query: String) async -> [WebDavItem] {
+        if Task.isCancelled { return [] }
+        var results: [WebDavItem] = []
+        let children: [WebDavItem]
+        do {
+            children = try await client.propfind(path: path)
+        } catch {
+            return []
+        }
+        for child in children {
+            if Task.isCancelled { return results }
+            if child.name.localizedCaseInsensitiveContains(query) {
+                results.append(child)
+            }
+            if child.isDirectory {
+                results.append(contentsOf: await collectSearchResults(path: child.path, query: query))
+            }
+        }
+        return results
     }
 
     // MARK: - Full-screen media preview
@@ -429,7 +531,7 @@ final class FileBrowserViewModel: ObservableObject {
             enqueueFolderDownload(item, destination: dest.appendingPathComponent(item.name))
         } else {
             // Auto-land single files in ~/Downloads/MiDoid/ — no save dialog needed.
-            let landingDir = IncomingFileServer.landingFolder()
+            let landingDir = IncomingFileServer.landingFolder(for: item.name)
             try? FileManager.default.createDirectory(at: landingDir, withIntermediateDirectories: true)
             let dest = IncomingFileServer.uniqueURL(in: landingDir, filename: item.name)
             enqueueDownload(item, destination: dest)
@@ -441,14 +543,16 @@ final class FileBrowserViewModel: ObservableObject {
         guard !toDownload.isEmpty else { return }
         if toDownload.count == 1 { await download(toDownload[0]); return }
 
-        // Auto-land to ~/Downloads/MiDoid/ — same as single-file, no save dialog.
-        let landingDir = IncomingFileServer.landingFolder()
-        try? FileManager.default.createDirectory(at: landingDir, withIntermediateDirectories: true)
+        // Auto-land to ~/Downloads/MiDoid/<type>/ — same as single-file, no save dialog.
+        let baseLandingDir = IncomingFileServer.landingFolder()
+        try? FileManager.default.createDirectory(at: baseLandingDir, withIntermediateDirectories: true)
         for item in toDownload {
             if item.isDirectory {
-                let dest = landingDir.appendingPathComponent(item.name)
+                let dest = baseLandingDir.appendingPathComponent("Folders", isDirectory: true).appendingPathComponent(item.name)
                 enqueueFolderDownload(item, destination: dest)
             } else {
+                let landingDir = IncomingFileServer.landingFolder(for: item.name)
+                try? FileManager.default.createDirectory(at: landingDir, withIntermediateDirectories: true)
                 let dest = IncomingFileServer.uniqueURL(in: landingDir, filename: item.name)
                 enqueueDownload(item, destination: dest)
             }
@@ -489,7 +593,6 @@ final class FileBrowserViewModel: ObservableObject {
                 }
                 let size = (try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
                 NotificationManager.fileDownloaded(name: job.name, size: size, at: dest)
-                NSWorkspace.shared.activateFileViewerSelecting([dest])
             } catch {
                 markTransfer(job.id, state: .failed, progress: 1,
                              error: WebDavError.friendly(error))
@@ -504,6 +607,7 @@ final class FileBrowserViewModel: ObservableObject {
         setCurrentFile(jobId, file: "Scanning…")
         let scan = await prescanRemote(remotePath)
         setJobTotals(jobId, totalFiles: scan.fileCount, totalBytes: scan.totalBytes)
+        setCurrentFile(jobId, file: nil)
 
         // Phase 2: Recursive download
         await downloadFolderContents(jobId: jobId, remotePath: remotePath, localDir: localDir)
@@ -539,23 +643,47 @@ final class FileBrowserViewModel: ObservableObject {
             return
         } catch { return }
 
-        for child in children {
-            if Task.isCancelled { break }
+        // Recurse into subdirectories sequentially first
+        for child in children where child.isDirectory {
+            if Task.isCancelled { return }
             let childLocal = localDir.appendingPathComponent(child.name)
-            if child.isDirectory {
-                await downloadFolderContents(jobId: jobId, remotePath: child.path, localDir: childLocal)
-            } else {
-                setCurrentFile(jobId, file: child.name)
-                do {
-                    try await client.download(path: child.path, to: childLocal)
-                    reportFileComplete(jobId, bytes: child.size)
-                } catch WebDavError.httpStatus(403) {
-                    reportFileSkipped(jobId)
-                } catch {
-                    reportFileFailed(jobId)
+            await downloadFolderContents(jobId: jobId, remotePath: child.path, localDir: childLocal)
+        }
+
+        // Download files concurrently with a bounded limit
+        let files = children.filter { !$0.isDirectory }
+        let cli = client
+        await withTaskGroup(of: (Bool, Int64, Bool).self) { group in
+            var inFlight = 0
+            for child in files {
+                if Task.isCancelled { break }
+                if inFlight >= Self.folderConcurrencyLimit {
+                    if let r = await group.next() { applyDownloadResult(jobId: jobId, r) }
+                    inFlight -= 1
+                }
+                let dest = localDir.appendingPathComponent(child.name)
+                let path = child.path; let size = child.size
+                inFlight += 1
+                group.addTask {
+                    do {
+                        try await cli.download(path: path, to: dest)
+                        return (true, size, false)
+                    } catch WebDavError.httpStatus(403) {
+                        return (false, 0, true)
+                    } catch {
+                        return (false, 0, false)
+                    }
                 }
             }
+            for await r in group { applyDownloadResult(jobId: jobId, r) }
         }
+    }
+
+    private func applyDownloadResult(jobId: UUID, _ r: (Bool, Int64, Bool)) {
+        let (success, bytes, skipped) = r
+        if skipped { reportFileSkipped(jobId) }
+        else if success { reportFileComplete(jobId, bytes: bytes) }
+        else { reportFileFailed(jobId) }
     }
 
     // MARK: - Upload
@@ -675,24 +803,48 @@ final class FileBrowserViewModel: ObservableObject {
 
         guard let children = enumerateLocal(localDir) else { return }
 
-        for child in children {
-            if Task.isCancelled { break }
+        // Recurse into subdirectories sequentially first
+        for child in children where child.hasDirectoryPath {
+            if Task.isCancelled { return }
             let name = child.lastPathComponent
             let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
             let childRemote = remotePath.hasSuffix("/") ? "\(remotePath)\(encoded)" : "\(remotePath)/\(encoded)"
-            if child.hasDirectoryPath {
-                await uploadFolderContents(jobId: jobId, localDir: child, remotePath: childRemote)
-            } else {
-                setCurrentFile(jobId, file: name)
+            await uploadFolderContents(jobId: jobId, localDir: child, remotePath: childRemote)
+        }
+
+        // Upload files concurrently with a bounded limit
+        let files = children.filter { !$0.hasDirectoryPath }
+        let cli = client
+        await withTaskGroup(of: (Bool, Int64).self) { group in
+            var inFlight = 0
+            for child in files {
+                if Task.isCancelled { break }
+                if inFlight >= Self.folderConcurrencyLimit {
+                    if let r = await group.next() { applyUploadResult(jobId: jobId, r) }
+                    inFlight -= 1
+                }
+                let name = child.lastPathComponent
+                let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+                let childRemote = remotePath.hasSuffix("/") ? "\(remotePath)\(encoded)" : "\(remotePath)/\(encoded)"
                 let size = (try? child.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
-                do {
-                    try await client.upload(path: childRemote, fileURL: child)
-                    reportFileComplete(jobId, bytes: size)
-                } catch {
-                    reportFileFailed(jobId)
+                let localURL = child
+                inFlight += 1
+                group.addTask {
+                    do {
+                        try await cli.upload(path: childRemote, fileURL: localURL)
+                        return (true, size)
+                    } catch {
+                        return (false, 0)
+                    }
                 }
             }
+            for await r in group { applyUploadResult(jobId: jobId, r) }
         }
+    }
+
+    private func applyUploadResult(jobId: UUID, _ r: (Bool, Int64)) {
+        if r.0 { reportFileComplete(jobId, bytes: r.1) }
+        else { reportFileFailed(jobId) }
     }
 
     private func enumerateLocal(_ dir: URL) -> [URL]? {
@@ -728,6 +880,10 @@ final class FileBrowserViewModel: ObservableObject {
     func createFolder(named name: String) async {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        guard !items.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            errorMessage = "\"\(trimmed)\" already exists in this folder."
+            return
+        }
         let path = currentPath.hasSuffix("/") ? "\(currentPath)\(trimmed)" : "\(currentPath)/\(trimmed)"
         do {
             try await client.mkcol(path: path)
@@ -770,7 +926,8 @@ final class FileBrowserViewModel: ObservableObject {
             var j = job
             if j.state == .failed || j.state == .cancelled {
                 j.state = .queued; j.progress = 0; j.error = nil
-                j.currentFile = nil; j.transferredBytes = 0
+                j.startTime = nil; j.currentFile = nil; j.transferredBytes = 0
+                j.recentSamples = []; j.smoothedBytesPerSecond = nil
                 j.completedFiles = 0; j.skippedFiles = 0; j.failedFiles = 0
                 j.summary = nil
             }
@@ -794,6 +951,7 @@ final class FileBrowserViewModel: ObservableObject {
 
     private func processQueue() async {
         isTransferring = true
+        batchSummary = nil
         beginTransferActivity()
         defer {
             isTransferring = false
@@ -804,6 +962,8 @@ final class FileBrowserViewModel: ObservableObject {
             Task { await load(path: currentPath) }
         }
 
+        var batchDownloads: [(name: String, bytes: Int64)] = []
+
         while let index = transferQueue.firstIndex(where: { $0.state == .queued }) {
             // Pause gate: spin-wait until unpaused (300 ms poll — cheap while idle)
             while isPaused && !Task.isCancelled {
@@ -812,6 +972,9 @@ final class FileBrowserViewModel: ObservableObject {
             if Task.isCancelled { break }
             transferQueue[index].state = .running
             transferQueue[index].progress = 0.05
+            transferQueue[index].startTime = Date()
+            transferQueue[index].recentSamples = [TransferSample(date: Date(), bytes: 0)]
+            transferQueue[index].smoothedBytesPerSecond = nil
             let job = transferQueue[index]
             transferStatus = "\(job.kind.rawValue)ing \(job.name)…"
             transferProgress = 0.05
@@ -828,8 +991,24 @@ final class FileBrowserViewModel: ObservableObject {
             if let idx = transferQueue.firstIndex(where: { $0.id == job.id }),
                transferQueue[idx].state == .running {
                 markTransfer(job.id, state: .complete, progress: 1, error: nil)
+                if job.kind == .download && !job.isFolder,
+                   let done = transferQueue.first(where: { $0.id == job.id }) {
+                    batchDownloads.append((name: job.name, bytes: done.transferredBytes))
+                }
             }
             transferProgress = 1
+        }
+
+        if batchDownloads.count > 1 {
+            var groups: [String: (Int, Int64)] = [:]
+            for item in batchDownloads {
+                let cat = IncomingFileServer.folderName(for: item.name)
+                let ex = groups[cat] ?? (0, 0)
+                groups[cat] = (ex.0 + 1, ex.1 + item.bytes)
+            }
+            batchSummary = groups
+                .map { BatchSummaryItem(category: $0.key, count: $0.value.0, bytes: $0.value.1) }
+                .sorted { $0.count > $1.count }
         }
     }
 
@@ -838,10 +1017,22 @@ final class FileBrowserViewModel: ObservableObject {
     private func setJobBytes(_ id: UUID, transferred: Int64, total: Int64) {
         guard let idx = transferQueue.firstIndex(where: { $0.id == id }) else { return }
         transferQueue[idx].transferredBytes = transferred
+        updateSpeedSample(for: idx, transferred: transferred)
         if total > 0 {
             transferQueue[idx].totalBytes = total
             transferQueue[idx].progress = min(0.99, Double(transferred) / Double(total))
         }
+    }
+
+    private func updateSpeedSample(for index: Int, transferred: Int64) {
+        let now = Date()
+        transferQueue[index].recentSamples.append(TransferSample(date: now, bytes: transferred))
+        transferQueue[index].recentSamples.removeAll { now.timeIntervalSince($0.date) > 5 }
+        guard let first = transferQueue[index].recentSamples.first,
+              let last = transferQueue[index].recentSamples.last,
+              last.bytes > first.bytes else { return }
+        let elapsed = max(0.1, last.date.timeIntervalSince(first.date))
+        transferQueue[index].smoothedBytesPerSecond = Double(last.bytes - first.bytes) / elapsed
     }
 
     private func setJobTotals(_ id: UUID, totalFiles: Int, totalBytes: Int64) {
@@ -850,7 +1041,7 @@ final class FileBrowserViewModel: ObservableObject {
         transferQueue[idx].totalBytes = totalBytes > 0 ? totalBytes : nil
     }
 
-    private func setCurrentFile(_ id: UUID, file: String) {
+    private func setCurrentFile(_ id: UUID, file: String?) {
         guard let idx = transferQueue.firstIndex(where: { $0.id == id }) else { return }
         transferQueue[idx].currentFile = file
     }
@@ -859,6 +1050,7 @@ final class FileBrowserViewModel: ObservableObject {
         guard let idx = transferQueue.firstIndex(where: { $0.id == id }) else { return }
         transferQueue[idx].completedFiles += 1
         transferQueue[idx].transferredBytes += bytes
+        updateSpeedSample(for: idx, transferred: transferQueue[idx].transferredBytes)
         let job = transferQueue[idx]
         if let total = job.totalFiles, total > 0 {
             // Prefer byte progress when the scan knows sizes; fall back to file count.
@@ -1002,6 +1194,89 @@ final class FileBrowserViewModel: ObservableObject {
             counter += 1
         }
         return candidate
+    }
+
+    func rename(_ item: WebDavItem, to newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != item.name else { return }
+        guard !trimmed.contains("/") else {
+            errorMessage = "Names cannot contain slashes."
+            return
+        }
+        if let existing = items.first(where: {
+            $0.id != item.id && $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            pendingRenameConflict = PendingRenameConflict(item: item, requestedName: trimmed, existingItem: existing)
+            return
+        }
+        await performRename(item, to: trimmed, replacing: nil)
+    }
+
+    func resolveRenameConflict(_ action: RenameConflictAction) async {
+        guard let conflict = pendingRenameConflict else { return }
+        pendingRenameConflict = nil
+        switch action {
+        case .cancel:
+            return
+        case .replace:
+            await performRename(conflict.item, to: conflict.requestedName, replacing: conflict.existingItem)
+        case .keepBoth:
+            await performRename(conflict.item, to: availableSiblingName(for: conflict.requestedName), replacing: nil)
+        }
+    }
+
+    func duplicate(_ item: WebDavItem) async {
+        let destination = pathForSibling(of: item, named: availableSiblingName(for: copyName(for: item.name)))
+        do {
+            try await client.copy(from: item.path, to: destination)
+            await load(path: currentPath)
+            selection = [destination]
+        } catch {
+            errorMessage = "Copy failed: \(WebDavError.friendly(error))"
+        }
+    }
+
+    private func performRename(_ item: WebDavItem, to name: String, replacing existing: WebDavItem?) async {
+        let destination = pathForSibling(of: item, named: name)
+        do {
+            if let existing {
+                try await client.delete(path: existing.path)
+            }
+            try await client.move(from: item.path, to: destination)
+            selection = [destination]
+            clearDetailPreview()
+            await load(path: currentPath)
+        } catch {
+            errorMessage = "Rename failed: \(WebDavError.friendly(error))"
+        }
+    }
+
+    private func availableSiblingName(for name: String) -> String {
+        let ns = name as NSString
+        let base = ns.deletingPathExtension
+        let ext = ns.pathExtension
+        let existing = Set(items.map { $0.name.lowercased() })
+        var counter = 1
+        var candidate = name
+        while existing.contains(candidate.lowercased()) {
+            candidate = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
+            counter += 1
+        }
+        return candidate
+    }
+
+    private func copyName(for name: String) -> String {
+        let ns = name as NSString
+        let base = ns.deletingPathExtension
+        let ext = ns.pathExtension
+        return ext.isEmpty ? "\(base) copy" : "\(base) copy.\(ext)"
+    }
+
+    private func pathForSibling(of item: WebDavItem, named name: String) -> String {
+        let parent = (item.path as NSString).deletingLastPathComponent
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        if parent == "/" || parent.isEmpty { return "/\(encoded)" }
+        return "\(parent)/\(encoded)"
     }
 
     private func temporaryPreviewURL(for item: WebDavItem) -> URL {

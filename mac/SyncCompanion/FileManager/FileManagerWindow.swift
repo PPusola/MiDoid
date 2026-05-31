@@ -36,6 +36,8 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
         w.delegate = self
         w.center()
         w.makeKeyAndOrderFront(nil)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.applicationIconImage = AppDelegate.dockIcon
         NSApp.activate(ignoringOtherApps: true)
         window = w
     }
@@ -49,7 +51,9 @@ final class FileManagerWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        FileBrowserViewModel.pendingRetries = viewModel?.transferQueue.filter { $0.state == .failed } ?? []
         window = nil
         viewModel = nil
+        NSApp.setActivationPolicy(.accessory)
     }
 }

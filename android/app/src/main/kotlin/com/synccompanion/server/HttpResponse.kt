@@ -46,6 +46,6 @@ class HttpResponse(
     }
 
     companion object {
-        private const val STREAM_BUFFER_SIZE = 64 * 1024
+        private const val STREAM_BUFFER_SIZE = 256 * 1024
     }
 }

@@ -73,7 +73,7 @@ struct WebDavItem: Identifiable, Hashable {
     }
 }
 
-final class WebDavClient {
+final class WebDavClient: @unchecked Sendable {
     static let defaultPort = 8080
 
     let ip: String
@@ -170,7 +170,7 @@ final class WebDavClient {
     func download(path: String) async throws -> Data {
         do {
             let (data, response) = try await session.data(for: req(method: "GET", path: path))
-            try validate(response, allowed: [200])
+            try validate(response, allowed: [200, 206])
             return data
         } catch {
             throw mapNetworkError(error)
@@ -179,17 +179,76 @@ final class WebDavClient {
 
     func download(path: String, to destination: URL,
                   onProgress: ((Int64, Int64) -> Void)? = nil) async throws {
-        let delegate = onProgress.map { DownloadProgressDelegate($0) }
+        let partURL = destination.appendingPathExtension("midoid-part")
+        let existingBytes: Int64 = {
+            guard FileManager.default.fileExists(atPath: partURL.path) else { return 0 }
+            return (try? FileManager.default.attributesOfItem(atPath: partURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        }()
+
+        var request = req(method: "GET", path: path)
+        if existingBytes > 0 { request.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range") }
+
         do {
-            let (tempURL, response) = try await session.download(
-                for: req(method: "GET", path: path), delegate: delegate)
-            try validate(response, allowed: [200])
+            let (asyncBytes, response) = try await session.bytes(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            if statusCode == 416 {
+                // Server can't satisfy range — partial file is stale, restart
+                try? FileManager.default.removeItem(at: partURL)
+                let (freshBytes, freshResp) = try await session.bytes(for: req(method: "GET", path: path))
+                try validate(freshResp, allowed: [200])
+                try await streamToPartFile(freshBytes, partURL: partURL, resumeOffset: 0,
+                                           serverResponse: freshResp, onProgress: onProgress)
+            } else {
+                try validate(response, allowed: [200, 206])
+                try await streamToPartFile(asyncBytes, partURL: partURL, resumeOffset: existingBytes,
+                                           serverResponse: response, onProgress: onProgress)
+            }
+
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
-            try FileManager.default.moveItem(at: tempURL, to: destination)
+            try FileManager.default.moveItem(at: partURL, to: destination)
         } catch {
+            // Leave .midoid-part on disk so next retry can resume from this offset
             throw mapNetworkError(error)
+        }
+    }
+
+    private func streamToPartFile(_ stream: URLSession.AsyncBytes, partURL: URL,
+                                   resumeOffset: Int64, serverResponse: URLResponse,
+                                   onProgress: ((Int64, Int64) -> Void)?) async throws {
+        let contentLen = (serverResponse as? HTTPURLResponse)
+            .flatMap { Int64($0.value(forHTTPHeaderField: "Content-Length") ?? "") } ?? 0
+        let totalLen = resumeOffset + contentLen
+
+        if !FileManager.default.fileExists(atPath: partURL.path) {
+            FileManager.default.createFile(atPath: partURL.path, contents: nil)
+        }
+        let fh = try FileHandle(forWritingTo: partURL)
+        if resumeOffset > 0 { try fh.seekToEnd() }
+
+        var buf = Data(capacity: 256 * 1024)
+        var received = resumeOffset
+        do {
+            for try await byte in stream {
+                buf.append(byte)
+                if buf.count >= 256 * 1024 {
+                    try fh.write(contentsOf: buf)
+                    received += Int64(buf.count)
+                    buf.removeAll(keepingCapacity: true)
+                    if totalLen > 0 { onProgress?(received, totalLen) }
+                }
+            }
+            if !buf.isEmpty {
+                try fh.write(contentsOf: buf)
+                received += Int64(buf.count)
+                if totalLen > 0 { onProgress?(received, totalLen) }
+            }
+            try fh.close()
+        } catch {
+            try? fh.close()
+            throw error
         }
     }
 
@@ -234,6 +293,40 @@ final class WebDavClient {
     func mkcol(path: String) async throws {
         do {
             let (_, response) = try await session.data(for: req(method: "MKCOL", path: path))
+            try validate(response, allowed: [200, 201, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
+    }
+
+    func move(from sourcePath: String, to destinationPath: String) async throws {
+        do {
+            let destination = url(for: destinationPath).absoluteString
+            let (_, response) = try await session.data(for: req(
+                method: "MOVE",
+                path: sourcePath,
+                extra: [
+                    "Destination": destination,
+                    "Overwrite": "F"
+                ]
+            ))
+            try validate(response, allowed: [200, 201, 204])
+        } catch {
+            throw mapNetworkError(error)
+        }
+    }
+
+    func copy(from sourcePath: String, to destinationPath: String) async throws {
+        do {
+            let destination = url(for: destinationPath).absoluteString
+            let (_, response) = try await session.data(for: req(
+                method: "COPY",
+                path: sourcePath,
+                extra: [
+                    "Destination": destination,
+                    "Overwrite": "F"
+                ]
+            ))
             try validate(response, allowed: [200, 201, 204])
         } catch {
             throw mapNetworkError(error)
@@ -309,13 +402,15 @@ extension WebDavError {
         if let url = error as? URLError {
             switch url.code {
             case .networkConnectionLost:
-                return "Connection lost — make sure both devices are on the same Wi-Fi network."
+                return "Connection dropped — check that both devices are on the same Wi-Fi, then reconnect."
             case .timedOut:
-                return "Transfer timed out — the file may be too large for the current connection speed."
+                return "Transfer timed out — the Android screen may have turned off mid-transfer. Keep the screen on during transfers."
             case .notConnectedToInternet:
                 return "No network connection."
             case .cannotConnectToHost:
-                return "Cannot reach device — keep the MiDoid app open and the screen on."
+                return "Cannot reach device — keep MiDoid open and the screen on."
+            case .cannotFindHost:
+                return "Cannot find device — this can happen after a Wi-Fi change. Reconnect to try again."
             default:
                 return url.localizedDescription
             }

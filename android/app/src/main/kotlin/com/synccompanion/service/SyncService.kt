@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -19,7 +20,14 @@ import com.synccompanion.server.FileStorageBackend
 import com.synccompanion.server.StorageBackend
 import com.synccompanion.server.WebDavServer
 import com.synccompanion.session.SessionManager
+import com.synccompanion.transfer.TransferEvent
+import com.synccompanion.transfer.TransferEvents
 import com.synccompanion.ui.MainActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Foreground service that keeps the WebDAV server and mDNS advertisement alive
@@ -39,9 +47,13 @@ class SyncService : Service() {
     private lateinit var sessionManager: SessionManager
     private lateinit var nsdHelper: NsdHelper
     private var webDavServer: WebDavServer? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var activeTransfer: TransferEvent? = null
     // Partial wake lock — keeps the CPU running while the screen is off so
     // the WebDAV server continues accepting connections when the device is locked.
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -66,6 +78,7 @@ class SyncService : Service() {
         super.onCreate()
         sessionManager = SessionManager(this)
         nsdHelper = NsdHelper(this)
+        observeTransferProgress()
     }
 
     /**
@@ -109,7 +122,13 @@ class SyncService : Service() {
 
         if (webDavServer == null) {
             try {
-                webDavServer = WebDavServer(createStorageBackend(), token).also { it.start() }
+                webDavServer = WebDavServer(createStorageBackend(), token) {
+                    val activeSession = sessionManager.repository.loadActiveSession()
+                    mapOf(
+                        "session_id" to (activeSession?.sessionId ?: sessionManager.repository.loadSessionId()),
+                        "expiry_ms" to (activeSession?.expiryMs ?: 0L)
+                    )
+                }.also { it.start() }
             } catch (e: Exception) {
                 android.util.Log.e("SyncService", "WebDAV server failed to start: ${e.message}")
                 sessionManager.revokeSession()
@@ -121,7 +140,7 @@ class SyncService : Service() {
         val sessionId = session?.sessionId ?: intent?.getStringExtra(EXTRA_SESSION_ID) ?: ""
         nsdHelper.register(sessionId)
 
-        acquireWakeLock()
+        acquireNetworkLocks()
         handler.removeCallbacks(expiryCheckRunnable)
         handler.postDelayed(expiryCheckRunnable, EXPIRY_CHECK_INTERVAL_MS)
 
@@ -133,7 +152,8 @@ class SyncService : Service() {
         handler.removeCallbacks(expiryCheckRunnable)
         nsdHelper.unregister()
         webDavServer?.stop()
-        releaseWakeLock()
+        releaseNetworkLocks()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -181,7 +201,21 @@ class SyncService : Service() {
             "Sharing files · tap to manage"
         }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIFICATION_ID, buildNotification(label))
+        nm.notify(NOTIFICATION_ID, buildNotification(label, activeTransfer))
+    }
+
+    private fun observeTransferProgress() {
+        serviceScope.launch {
+            TransferEvents.incoming.collect { event ->
+                activeTransfer = if (event.complete) null else event
+                updateNotification()
+            }
+        }
+    }
+
+    private fun acquireNetworkLocks() {
+        acquireWakeLock()
+        acquireWifiLocks()
     }
 
     private fun acquireWakeLock() {
@@ -189,6 +223,29 @@ class SyncService : Service() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MiDoid:SyncService").apply {
             acquire(wakeLockTimeoutMs())
+        }
+    }
+
+    private fun acquireWifiLocks() {
+        if (wifiLock != null && multicastLock != null) return
+        val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+        if (wifiLock == null) {
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                @Suppress("DEPRECATION")
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+            wifiLock = wifi.createWifiLock(mode, "MiDoid:WifiLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+        if (multicastLock == null) {
+            multicastLock = wifi.createMulticastLock("MiDoid:MulticastLock").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
         }
     }
 
@@ -201,9 +258,21 @@ class SyncService : Service() {
         }
     }
 
+    private fun releaseNetworkLocks() {
+        releaseWakeLock()
+        releaseWifiLocks()
+    }
+
     private fun releaseWakeLock() {
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
+    }
+
+    private fun releaseWifiLocks() {
+        multicastLock?.takeIf { it.isHeld }?.release()
+        multicastLock = null
+        wifiLock?.takeIf { it.isHeld }?.release()
+        wifiLock = null
     }
 
     /**
@@ -212,7 +281,10 @@ class SyncService : Service() {
      *
      * @param contentText  Secondary text shown below the notification title.
      */
-    private fun buildNotification(contentText: String = "Sharing files · tap to manage"): android.app.Notification {
+    private fun buildNotification(
+        contentText: String = "Sharing files · tap to manage",
+        transfer: TransferEvent? = activeTransfer
+    ): android.app.Notification {
         val openIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -223,15 +295,45 @@ class SyncService : Service() {
             Intent(this, SyncService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.notif_title))
-            .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_sync)
             .setContentIntent(openIntent)
             .addAction(R.drawable.ic_sync, getString(R.string.notif_action_end), stopIntent)
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+
+        if (transfer != null) {
+            val transferText = if (transfer.totalBytes > 0L) {
+                "${transfer.filename} · ${formatBytes(transfer.receivedBytes)} of ${formatBytes(transfer.totalBytes)}"
+            } else {
+                "${transfer.filename} · ${formatBytes(transfer.receivedBytes)}"
+            }
+            builder
+                .setContentText(transferText)
+                .setSubText(contentText)
+            if (transfer.totalBytes > 0L) {
+                builder.setProgress(100, transfer.percent, false)
+            } else {
+                builder.setProgress(0, 0, true)
+            }
+        } else {
+            builder
+                .setContentText(contentText)
+                .setProgress(0, 0, false)
+        }
+
+        return builder.build()
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val value = bytes.toDouble()
+        return when {
+            value < 1_024 -> "$bytes B"
+            value < 1_048_576 -> "%.1f KB".format(value / 1_024)
+            value < 1_073_741_824 -> "%.1f MB".format(value / 1_048_576)
+            else -> "%.2f GB".format(value / 1_073_741_824)
+        }
     }
 
     /** Creates the notification channel required for foreground services on Android 8+. */

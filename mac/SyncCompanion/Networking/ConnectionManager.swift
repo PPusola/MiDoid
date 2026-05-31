@@ -17,6 +17,12 @@ private struct PairedSession: Codable {
     let token: String
     let ip: String
     let port: Int
+    let expiry: Date?
+
+    var isExpired: Bool {
+        guard let expiry else { return false }
+        return expiry <= Date()
+    }
 }
 
 @MainActor
@@ -34,10 +40,19 @@ final class ConnectionManager: NSObject {
     private var recentDisconnects: [Date] = []
     private var incomingFileServer: IncomingFileServer?
 
+    var hasRememberedSession: Bool { rememberedSession != nil }
+    var rememberedEndpointLabel: String? {
+        rememberedSession.map { "\($0.ip):\($0.port)" }
+    }
+
     init(sessionState: SessionState) {
         self.sessionState = sessionState
         if let data = KeychainStore.load(forKey: Self.rememberedSessionKey) {
             rememberedSession = try? JSONDecoder().decode(PairedSession.self, from: data)
+            if let rememberedSession, rememberedSession.isExpired {
+                self.rememberedSession = nil
+                KeychainStore.delete(forKey: Self.rememberedSessionKey)
+            }
         }
         super.init()
         discovery.delegate = self
@@ -103,6 +118,16 @@ final class ConnectionManager: NSObject {
         autoReconnectEnabled = false
     }
 
+    func forgetRememberedDevice() {
+        rememberedSession = nil
+        KeychainStore.delete(forKey: Self.rememberedSessionKey)
+        autoReconnectEnabled = false
+        reconnectRetryTask?.cancel()
+        if case .connecting = sessionState.status {
+            generateSession()
+        }
+    }
+
     // Sends local files to the Android device by uploading them to the root WebDAV directory.
     // Opens the file manager window first so the user can see progress.
     func quickSend(urls: [URL]) {
@@ -115,6 +140,12 @@ final class ConnectionManager: NSObject {
         autoReconnectEnabled = true
         FileManagerWindow.shared.close()
         guard let session = rememberedSession else {
+            generateSession()
+            return
+        }
+        guard !session.isExpired else {
+            rememberedSession = nil
+            KeychainStore.delete(forKey: Self.rememberedSessionKey)
             generateSession()
             return
         }
@@ -172,6 +203,12 @@ final class ConnectionManager: NSObject {
             await MainActor.run {
                 guard self.autoReconnectEnabled else { return }
                 guard case .connecting = self.sessionState.status else { return }
+                guard !session.isExpired else {
+                    self.rememberedSession = nil
+                    KeychainStore.delete(forKey: Self.rememberedSessionKey)
+                    self.generateSession()
+                    return
+                }
                 self.completeConnection(ip: session.ip, port: session.port, token: session.token, sessionId: session.sessionId)
             }
         }
@@ -249,12 +286,28 @@ final class ConnectionManager: NSObject {
                 }
                 guard let (data, resp) = try? await session.data(for: request),
                       (resp as? HTTPURLResponse)?.statusCode == 200,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-                      let name = json["name"], !name.isEmpty else { continue }
-                self.sessionState.deviceName = name
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                if let name = json["name"] as? String, !name.isEmpty {
+                    self.sessionState.deviceName = name
+                }
+                if let expiryMs = json["expiry_ms"] as? NSNumber, expiryMs.int64Value > 0 {
+                    let expiry = Date(timeIntervalSince1970: TimeInterval(expiryMs.int64Value) / 1000)
+                    self.remember(PairedSession(sessionId: self.currentSessionIdForConnection(ip: ip, port: port, token: token), token: token, ip: ip, port: port, expiry: expiry))
+                    self.sessionState.updateConnectedExpiry(expiry)
+                }
                 return
             }
         }
+    }
+
+    private func currentSessionIdForConnection(ip: String, port: Int, token: String) -> String {
+        if let rememberedSession,
+           rememberedSession.ip == ip,
+           rememberedSession.port == port,
+           rememberedSession.token == token {
+            return rememberedSession.sessionId
+        }
+        return currentSessionId
     }
 
     // MARK: - Incoming file server
@@ -311,13 +364,14 @@ extension ConnectionManager: MdnsDiscoveryDelegate {
     }
 
     private func completeConnection(ip: String, port: Int, token: String, sessionId: String) {
-        remember(PairedSession(sessionId: sessionId, token: token, ip: ip, port: port))
+        let expiry = rememberedSession?.sessionId == sessionId ? rememberedSession?.expiry : nil
+        remember(PairedSession(sessionId: sessionId, token: token, ip: ip, port: port, expiry: expiry))
         autoReconnectEnabled = true
         reconnectRetryTask?.cancel()
         recentDisconnects.removeAll()
         currentToken = ""
         discovery.stop()
-        sessionState.setConnected(ip: ip, port: port, token: token, expiry: nil)
+        sessionState.setConnected(ip: ip, port: port, token: token, expiry: expiry)
         fetchDeviceName(ip: ip, port: port, token: token)
         startIncomingServer(token: token, deviceName: "")
         FileManagerWindow.shared.open(ip: ip, port: port, token: token)

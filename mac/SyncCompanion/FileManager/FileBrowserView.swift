@@ -10,7 +10,10 @@ struct FileBrowserView: View {
     @State private var newFolderName = ""
     @State private var isDropTarget = false
     @State private var showHistory = false
+    @State private var renamingItemID: String?
+    @State private var renameText = ""
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isRenameFocused: Bool
 
     var body: some View {
         ZStack {
@@ -66,6 +69,22 @@ struct FileBrowserView: View {
             Button("Cancel", role: .cancel) { viewModel.cancelDelete() }
         } message: {
             Text(pendingDeleteMessage)
+        }
+        .alert("Name already exists", isPresented: Binding(
+            get: { viewModel.pendingRenameConflict != nil },
+            set: { if !$0 { Task { await viewModel.resolveRenameConflict(.cancel) } } }
+        )) {
+            Button("Replace", role: .destructive) {
+                Task { await viewModel.resolveRenameConflict(.replace) }
+            }
+            Button("Keep Both") {
+                Task { await viewModel.resolveRenameConflict(.keepBoth) }
+            }
+            Button("Cancel", role: .cancel) {
+                Task { await viewModel.resolveRenameConflict(.cancel) }
+            }
+        } message: {
+            Text(renameConflictMessage)
         }
     }
 
@@ -136,6 +155,7 @@ struct FileBrowserView: View {
                 Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                 TextField("Search", text: $viewModel.searchText).textFieldStyle(.plain)
                     .focused($isSearchFocused)
+                    .onChange(of: viewModel.searchText) { _ in viewModel.searchTextDidChange() }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -149,6 +169,13 @@ struct FileBrowserView: View {
                 .frame(width: 0)
 
             Menu {
+                Toggle(isOn: Binding(
+                    get: { viewModel.recursiveSearchEnabled },
+                    set: { viewModel.setRecursiveSearchEnabled($0) }
+                )) {
+                    Label("Search Subfolders", systemImage: "folder.badge.questionmark")
+                }
+                Divider()
                 ForEach(FileSortKey.allCases, id: \.self) { key in
                     Button {
                         viewModel.setSort(key)
@@ -239,12 +266,28 @@ struct FileBrowserView: View {
             ZStack {
                 Table(viewModel.filteredItems, selection: $viewModel.selection) {
                     TableColumn("Name") { item in
-                        Label(item.name, systemImage: item.sfSymbol).lineLimit(1)
+                        if renamingItemID == item.id {
+                            TextField("Name", text: $renameText)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($isRenameFocused)
+                                .onSubmit { commitRename(item) }
+                                .onExitCommand { cancelRename() }
+                        } else {
+                            Label(item.name, systemImage: item.sfSymbol).lineLimit(1)
+                        }
                     }
                     .width(min: 180, ideal: 300)
 
                     TableColumn("Kind") { item in
-                        Text(item.displayKind).foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.displayKind).foregroundColor(.secondary)
+                            if viewModel.isShowingRecursiveResults {
+                                Text(parentPathLabel(for: item))
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                     .width(110)
 
@@ -260,7 +303,7 @@ struct FileBrowserView: View {
                 }
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first,
-                       let item = viewModel.items.first(where: { $0.id == id }) {
+                       let item = viewModel.visibleSourceItems.first(where: { $0.id == id }) {
                         if item.isPreviewableMedia {
                             Button("Preview") { Task { await viewModel.preview(item) } }
                         }
@@ -270,6 +313,14 @@ struct FileBrowserView: View {
                             Button("Download") { Task { await viewModel.download(item) } }
                         }
                         Divider()
+                        if !viewModel.isShowingRecursiveResults {
+                            Button("Rename") {
+                                beginRename(item)
+                            }
+                            Button("Duplicate") {
+                                Task { await viewModel.duplicate(item) }
+                            }
+                        }
                         Button("Delete", role: .destructive) {
                             viewModel.selection = ids
                             viewModel.deleteSelected()
@@ -277,15 +328,17 @@ struct FileBrowserView: View {
                     }
                 } primaryAction: { ids in
                     if let id = ids.first,
-                       let item = viewModel.items.first(where: { $0.id == id }) {
+                       let item = viewModel.visibleSourceItems.first(where: { $0.id == id }) {
                         viewModel.activate(item)
                     }
                 }
 
-                if viewModel.isLoadingPreview {
+                if viewModel.isLoadingPreview || viewModel.isSearchingRecursively {
                     VStack(spacing: 10) {
                         ProgressView()
-                        Text("Loading preview…").font(.callout).foregroundColor(.secondary)
+                        Text(viewModel.isSearchingRecursively ? "Searching subfolders…" : "Loading preview…")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
                     }
                     .padding(18)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -380,9 +433,45 @@ struct FileBrowserView: View {
             .padding(12)
             .background(.regularMaterial)
         }
+        if let summary = viewModel.batchSummary, !summary.isEmpty {
+            batchSummaryPanel(summary)
+        }
         if !viewModel.transferHistory.isEmpty {
             transferHistoryPanel
         }
+    }
+
+    private func batchSummaryPanel(_ items: [BatchSummaryItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.green)
+                Spacer()
+                Button("Dismiss") { viewModel.batchSummary = nil }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+            }
+            ForEach(items, id: \.category) { item in
+                HStack {
+                    Text(item.category)
+                        .font(.caption)
+                    Spacer()
+                    Text("\(item.count) file\(item.count == 1 ? "" : "s") · \(FileBrowserViewModel.formatBytes(item.bytes))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([IncomingFileServer.landingFolder()])
+            } label: {
+                Label("Show in Finder", systemImage: "folder")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(12)
+        .background(.regularMaterial)
     }
 
     private var transferHistoryPanel: some View {
@@ -461,6 +550,9 @@ struct FileBrowserView: View {
                         let pct = Int(Double(job.transferredBytes) / Double(tb) * 100)
                         s += " · \(pct)%"
                     }
+                    if let speed = job.smoothedBytesPerSecond, speed > 0 {
+                        s += " · \(FileBrowserViewModel.formatBytes(Int64(speed)))/s"
+                    }
                     if let file = job.currentFile { s += " · \(file)" }
                     return s
                 }
@@ -479,7 +571,12 @@ struct FileBrowserView: View {
             switch job.state {
             case .running:
                 if let total = job.totalBytes, total > 0 {
-                    return "\(FileBrowserViewModel.formatBytes(job.transferredBytes)) of \(FileBrowserViewModel.formatBytes(total))"
+                    return transferProgressDetail(
+                        transferred: job.transferredBytes,
+                        total: total,
+                        speedBytesPerSecond: job.smoothedBytesPerSecond,
+                        startTime: job.startTime
+                    )
                 }
                 return "\(job.kind.rawValue.capitalized)ing…"
             case .complete:
@@ -508,6 +605,12 @@ struct FileBrowserView: View {
             Divider().frame(height: 12)
             Text("Connected to \(viewModel.endpointLabel)")
                 .font(.caption).foregroundColor(.secondary)
+            if let latency = viewModel.lastLatencyMs {
+                Divider().frame(height: 12)
+                Text("\(latency) ms")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             Spacer()
             if viewModel.isTransferring {
                 ProgressView(value: viewModel.transferProgress)
@@ -546,6 +649,11 @@ struct FileBrowserView: View {
                 : "This file will be permanently deleted from your Android device."
         }
         return "\(items.count) items will be permanently deleted from your Android device."
+    }
+
+    private var renameConflictMessage: String {
+        guard let conflict = viewModel.pendingRenameConflict else { return "" }
+        return "\"\(conflict.requestedName)\" already exists. Replace it, or keep both with a numbered name."
     }
 
     private func relativeDate(_ date: Date) -> String {
@@ -590,6 +698,69 @@ struct FileBrowserView: View {
         }
         group.notify(queue: .main) { viewModel.prepareUploadFiles(urls) }
         return true
+    }
+
+    private func beginRename(_ item: WebDavItem) {
+        viewModel.selection = [item.id]
+        renamingItemID = item.id
+        renameText = item.name
+        DispatchQueue.main.async { isRenameFocused = true }
+    }
+
+    private func cancelRename() {
+        renamingItemID = nil
+        renameText = ""
+        isRenameFocused = false
+    }
+
+    private func commitRename(_ item: WebDavItem) {
+        let newName = renameText
+        cancelRename()
+        Task { await viewModel.rename(item, to: newName) }
+    }
+
+    private func transferProgressDetail(
+        transferred: Int64,
+        total: Int64,
+        speedBytesPerSecond: Double?,
+        startTime: Date?
+    ) -> String {
+        var parts = [
+            "\(FileBrowserViewModel.formatBytes(transferred)) of \(FileBrowserViewModel.formatBytes(total))"
+        ]
+        guard transferred > 0 else { return parts.joined(separator: " · ") }
+        let bytesPerSecond: Double
+        if let speedBytesPerSecond, speedBytesPerSecond > 0 {
+            bytesPerSecond = speedBytesPerSecond
+        } else if let startTime {
+            let elapsed = max(0.1, Date().timeIntervalSince(startTime))
+            bytesPerSecond = Double(transferred) / elapsed
+        } else {
+            return parts.joined(separator: " · ")
+        }
+        guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return parts.joined(separator: " · ") }
+        parts.append("\(FileBrowserViewModel.formatBytes(Int64(bytesPerSecond)))/s")
+        let remainingSeconds = Double(max(0, total - transferred)) / bytesPerSecond
+        if remainingSeconds.isFinite, remainingSeconds > 0.5 {
+            parts.append("\(formatETA(remainingSeconds)) left")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func formatETA(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.up))
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        let seconds = total % 60
+        if minutes < 60 { return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s" }
+        let hours = minutes / 60
+        return "\(hours)h \(minutes % 60)m"
+    }
+
+    private func parentPathLabel(for item: WebDavItem) -> String {
+        let parent = (item.path as NSString).deletingLastPathComponent
+        if parent.isEmpty || parent == "/" { return "/" }
+        return parent
     }
 }
 
@@ -1012,6 +1183,15 @@ private struct MediaPreviewOverlay: View {
             Spacer()
 
             HStack(spacing: 18) {
+                Button {
+                    Task { await viewModel.download(preview.item) }
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .foregroundColor(.white.opacity(0.85))
+                }
+                .buttonStyle(.borderless)
+                .help("Download")
+
                 // Expand/fit toggle — images only
                 if case .image = preview.kind {
                     Button {
