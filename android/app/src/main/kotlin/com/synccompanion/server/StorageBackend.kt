@@ -165,29 +165,28 @@ class FileStorageBackend(
 
     /**
      * Resolves a WebDAV path to a local [File], guarding against path traversal.
-     * If the canonical result escapes [root], the root itself is returned as a safe fallback.
      *
      * @param path  Normalized WebDAV path.
-     * @return      A [File] guaranteed to be inside [root].
+     * @return      A [File] inside [root], or `null` if the path escapes [root].
      */
-    private fun resolve(path: String): File {
+    private fun resolve(path: String): File? {
         val candidate = cleanSegments(path).fold(rootCanon) { dir, segment -> File(dir, segment) }.canonicalFile
         return if (candidate == rootCanon || candidate.path.startsWith(rootCanon.path + File.separator)) {
             candidate
         } else {
-            rootCanon
+            null
         }
     }
 
     /** @see StorageBackend.exists */
-    override fun exists(path: String): Boolean = resolve(path).exists()
+    override fun exists(path: String): Boolean = resolve(path)?.exists() == true
 
     /**
      * @see StorageBackend.entry
      * Uses the [rootDisplayName] as the display name when [path] refers to the root directory.
      */
     override fun entry(path: String): StorageEntry? {
-        val file = resolve(path)
+        val file = resolve(path) ?: return null
         if (!file.exists()) return null
         val name = if (path == "/" || path.isBlank()) rootDisplayName else file.name
         return StorageEntry(name, normalizedPath(path), file.isDirectory, file.length(), file.lastModified(), null)
@@ -195,7 +194,7 @@ class FileStorageBackend(
 
     /** @see StorageBackend.list */
     override fun list(path: String): List<StorageEntry> {
-        val dir = resolve(path)
+        val dir = resolve(path) ?: return emptyList()
         return dir.listFiles()?.map {
             StorageEntry(
                 name = it.name,
@@ -209,14 +208,14 @@ class FileStorageBackend(
     }
 
     /** @see StorageBackend.openRead */
-    override fun openRead(path: String): InputStream? = resolve(path).inputStream()
+    override fun openRead(path: String): InputStream? = resolve(path)?.takeIf { it.isFile }?.inputStream()
 
     /**
      * @see StorageBackend.write
      * Creates parent directories as needed. Uses a 16 KB copy buffer for efficiency.
      */
     override fun write(path: String, input: InputStream, contentLength: Long): Boolean {
-        val file = resolve(path)
+        val file = resolve(path) ?: return false
         file.parentFile?.mkdirs()
         file.outputStream().use { out ->
             val buf = ByteArray(16_384)
@@ -232,7 +231,11 @@ class FileStorageBackend(
     }
 
     /** @see StorageBackend.delete */
-    override fun delete(path: String): Boolean = resolve(path).deleteRecursively()
+    override fun delete(path: String): Boolean {
+        val file = resolve(path) ?: return false
+        if (!file.exists() || file == rootCanon) return false
+        return file.deleteRecursively()
+    }
 
     /**
      * @see StorageBackend.makeDirectory
@@ -240,19 +243,29 @@ class FileStorageBackend(
      * (intermediate directories are not created automatically).
      */
     override fun makeDirectory(path: String): Boolean {
-        val dir = resolve(path)
+        val dir = resolve(path) ?: return false
         if (dir.exists()) return false
         if (dir.parentFile?.exists() == false) return false
         return dir.mkdir()
     }
 
     /** @see StorageBackend.move */
-    override fun move(sourcePath: String, destinationPath: String): Boolean =
-        resolve(sourcePath).renameTo(resolve(destinationPath).also { it.parentFile?.mkdirs() })
+    override fun move(sourcePath: String, destinationPath: String): Boolean {
+        val source = resolve(sourcePath) ?: return false
+        val destination = resolve(destinationPath) ?: return false
+        if (!source.exists() || source == rootCanon || destination == rootCanon) return false
+        destination.parentFile?.mkdirs()
+        return source.renameTo(destination)
+    }
 
     /** @see StorageBackend.copy */
-    override fun copy(sourcePath: String, destinationPath: String): Boolean =
-        resolve(sourcePath).copyRecursively(resolve(destinationPath).also { it.parentFile?.mkdirs() }, overwrite = true)
+    override fun copy(sourcePath: String, destinationPath: String): Boolean {
+        val source = resolve(sourcePath) ?: return false
+        val destination = resolve(destinationPath) ?: return false
+        if (!source.exists() || source == rootCanon || destination == rootCanon) return false
+        destination.parentFile?.mkdirs()
+        return source.copyRecursively(destination, overwrite = true)
+    }
 }
 
 /**

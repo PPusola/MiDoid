@@ -1,6 +1,7 @@
 package com.synccompanion.transfer
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -14,6 +15,7 @@ class TransferEventsTest {
         val job = launch {
             TransferEvents.incoming.collect { received.add(it) }
         }
+        runCurrent()
 
         TransferEvents.reportIncoming("photo.jpg", 512, 1024, false)
         TransferEvents.reportIncoming("photo.jpg", 1024, 1024, true)
@@ -63,6 +65,7 @@ class TransferEventsTest {
 
         val jobA = launch { TransferEvents.incoming.collect { listA.add(it) } }
         val jobB = launch { TransferEvents.incoming.collect { listB.add(it) } }
+        runCurrent()
 
         TransferEvents.reportIncoming("x.jpg", 1, 1, true)
         testScheduler.advanceUntilIdle()

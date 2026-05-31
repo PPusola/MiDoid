@@ -6,6 +6,7 @@ import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.File
+import kotlin.io.path.createTempDirectory
 
 class FileStorageBackendTest {
 
@@ -14,7 +15,7 @@ class FileStorageBackendTest {
 
     @Before
     fun setUp() {
-        root = createTempDir("midoid-test")
+        root = createTempDirectory("midoid-test").toFile()
         backend = FileStorageBackend(root, "Test Root")
     }
 

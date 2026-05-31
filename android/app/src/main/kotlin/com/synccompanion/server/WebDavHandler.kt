@@ -1,10 +1,10 @@
 package com.synccompanion.server
 
 import android.os.Build
-import android.util.Base64
 import android.util.Log
 import com.synccompanion.transfer.TransferEvents
 import java.io.InputStream
+import java.util.Base64
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -69,8 +69,8 @@ object WebDavHandler {
         val auth = req.header("authorization") ?: return false
         if (!auth.startsWith("Basic ", ignoreCase = true)) return false
         val decoded = try {
-            String(Base64.decode(auth.substring(6).trim(), Base64.NO_WRAP))
-        } catch (_: Exception) { return false }
+            String(Base64.getDecoder().decode(auth.substring(6).trim()), Charsets.UTF_8)
+        } catch (_: IllegalArgumentException) { return false }
         return decoded == "sync:$token"
     }
 
